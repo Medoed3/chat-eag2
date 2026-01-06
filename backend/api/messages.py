@@ -62,7 +62,7 @@ def create_router(manager):
             current_user: models.User = Depends(get_current_user)
     ):
         """
-        Отправка нового сообщения
+        Отправка нового сообщения с мгновенной доставкой через WebSocket
         """
         chat = db.query(models.Chat).filter(models.Chat.id == message_data.chat_id).first()
         if not chat:
@@ -103,8 +103,8 @@ def create_router(manager):
         # Подгружаем отправителя для ответа
         db_message.sender = current_user
 
-        # Формируем данные для WebSocket
-        response_data = {
+        # Формируем данные для WebSocket рассылки
+        message_response = {
             "type": "new_message",
             "message": {
                 "id": db_message.id,
@@ -113,23 +113,24 @@ def create_router(manager):
                 "file_type": db_message.file_type,
                 "sender_id": db_message.sender_id,
                 "sender_name": current_user.full_name,
+                "sender_avatar": current_user.avatar_url,
                 "chat_id": db_message.chat_id,
                 "timestamp": db_message.timestamp.isoformat(),
                 "is_read": False
             }
         }
 
-        # Отправляем push-уведомления асинхронно
-        asyncio.create_task(send_push_notifications(chat, current_user, db_message, db))
+        # ОТПРАВКА ВСЕМ ПОДКЛЮЧЕННЫМ К ЧАТУ через WebSocket
+        await manager.broadcast_to_chat(chat.id, message_response)
 
-        # Рассылка через WebSocket
-        await manager.broadcast(response_data)
+        # Асинхронная отправка push-уведомлений (не блокирует ответ)
+        asyncio.create_task(send_push_notifications(chat, current_user, db_message, db))
 
         return db_message
 
     async def send_push_notifications(chat, sender, message, db):
         """
-        Асинхронная отправка push-уведомлений
+        Асинхронная отправка push-уведомлений участникам чата
         """
         try:
             # Получаем всех участников чата, кроме отправителя
@@ -182,7 +183,7 @@ def create_router(manager):
                             )
                         except WebPushException as e:
                             print(f"Push failed for user {recipient.id}: {e}")
-                            # Можно удалить нерабочую подписку
+                            # Удаляем нерабочую подписку
                             if e.response and e.response.status_code == 410:
                                 db.delete(subscription)
                                 db.commit()
@@ -192,10 +193,8 @@ def create_router(manager):
     @router.websocket("/ws/{chat_id}")
     async def websocket_endpoint(websocket: WebSocket, chat_id: int):
         """
-        WebSocket endpoint для реального времени
+        WebSocket endpoint для реального времени в конкретном чате
         """
-        await websocket.accept()
-
         try:
             # Получаем токен из query параметров
             token = websocket.query_params.get("token")
@@ -240,16 +239,21 @@ def create_router(manager):
                 await websocket.close(code=1008)
                 return
 
+            # Принимаем WebSocket соединение (один раз!)
+            await websocket.accept()
+
             # Подключаем к менеджеру
-            await manager.connect(websocket)
+            await manager.connect(websocket, chat_id)
 
             # Отправляем подтверждение подключения
             await websocket.send_json({
                 "type": "connection_established",
-                "message": "Connected to chat"
+                "message": f"Connected to chat {chat_id}",
+                "chat_id": chat_id,
+                "user_id": current_user.id
             })
 
-            # Слушаем сообщения
+            # Слушаем входящие сообщения от клиента
             try:
                 while True:
                     data = await websocket.receive_text()
@@ -257,34 +261,57 @@ def create_router(manager):
                     try:
                         message_data = json.loads(data)
 
-                        # Проверяем тип сообщения
+                        # Обработка индикатора набора текста
                         if message_data.get("type") == "typing":
-                            # Рассылаем информацию о наборе текста
                             typing_data = {
                                 "type": "user_typing",
                                 "user_id": current_user.id,
                                 "user_name": current_user.full_name,
-                                "chat_id": chat_id
+                                "chat_id": chat_id,
+                                "is_typing": message_data.get("is_typing", True)
                             }
-                            await manager.broadcast_except(typing_data, websocket)
+                            # Рассылаем информацию о наборе текста всем кроме отправителя
+                            await manager.broadcast_to_chat(chat_id, typing_data, exclude_websocket=websocket)
+
+                        # Обработка отметок о прочтении
                         elif message_data.get("type") == "read_receipt":
-                            # Обработка отметок о прочтении
-                            pass
+                            # Обновляем статус прочтения в БД
+                            message_id = message_data.get("message_id")
+                            if message_id:
+                                msg = db.query(models.Message).filter(models.Message.id == message_id).first()
+                                if msg and msg.chat_id == chat_id:
+                                    msg.is_read = True
+                                    db.commit()
+
+                                    # Рассылаем подтверждение прочтения
+                                    receipt_data = {
+                                        "type": "message_read",
+                                        "message_id": message_id,
+                                        "chat_id": chat_id,
+                                        "user_id": current_user.id
+                                    }
+                                    await manager.broadcast_to_chat(chat_id, receipt_data, exclude_websocket=websocket)
 
                     except json.JSONDecodeError:
-                        await websocket.send_json({"error": "Invalid JSON"})
+                        await websocket.send_json({"type": "error", "error": "Invalid JSON format"})
 
             except WebSocketDisconnect:
-                manager.disconnect(websocket)
+                print(f"WebSocket отключен для чата {chat_id}")
+
+            except Exception as e:
+                print(f"Ошибка в WebSocket цикле: {e}")
+
+            finally:
+                # Отключаем при разрыве соединения
+                manager.disconnect(websocket, chat_id)
+                if 'db' in locals():
+                    db.close()
 
         except Exception as e:
-            print(f"WebSocket error: {e}")
+            print(f"WebSocket connection error: {e}")
             try:
                 await websocket.close(code=1011)
             except:
                 pass
-        finally:
-            if 'db' in locals():
-                db.close()
 
     return router

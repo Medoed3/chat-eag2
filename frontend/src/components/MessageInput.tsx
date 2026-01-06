@@ -1,30 +1,81 @@
-// frontend/src/components/MessageInput.tsx
-import { useState, useRef } from 'react'
+// frontend/src/components/MessageInput.tsx - упрощенная версия
+import { useState, useRef, useEffect } from 'react'
 import { Send, Paperclip, X } from 'lucide-react'
 import api from '../services/api'
+import { useWebSocket } from '../hooks/useWebSocket'
 
 interface MessageInputProps {
   chatId: number
   onMessageSent: () => void
+  currentUserId?: number
 }
 
-const MessageInput = ({ chatId, onMessageSent }: MessageInputProps) => {
+const MessageInput = ({ chatId, onMessageSent, currentUserId }: MessageInputProps) => {
   const [content, setContent] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [typing, setTyping] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  const { send } = useWebSocket(chatId)
+
+  // Отправка индикатора набора текста
+  const sendTypingIndicator = (isTyping: boolean) => {
+    if (send) {
+      send({
+        type: "typing",
+        chat_id: chatId,
+        is_typing: isTyping,
+        user_id: currentUserId
+      })
+    }
+  }
+
+  // Обработка изменения текста с индикатором набора
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value
+    setContent(value)
+
+    // Отправляем индикатор набора текста
+    if (value.trim() && !typing) {
+      sendTypingIndicator(true)
+      setTyping(true)
+    }
+
+    // Сбрасываем таймер при каждом вводе
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+    }
+
+    // Через 3 секунды бездействия отправляем "перестал печатать"
+    typingTimeoutRef.current = setTimeout(() => {
+      if (typing) {
+        sendTypingIndicator(false)
+        setTyping(false)
+      }
+    }, 3000)
+  }
 
   // Отправка сообщения
   const sendMessage = async () => {
-    if (!content.trim() && !file) return
+    if ((!content.trim() && !file) || uploading) return
+
+    // Сбрасываем индикатор набора
+    if (typing) {
+      sendTypingIndicator(false)
+      setTyping(false)
+    }
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+    }
 
     setUploading(true)
     try {
       let fileUrl = null
       let fileType = null
 
-      // Если есть файл, сначала загружаем его
+      // Если есть файл, загружаем его
       if (file) {
         const formData = new FormData()
         formData.append('file', file)
@@ -46,7 +97,7 @@ const MessageInput = ({ chatId, onMessageSent }: MessageInputProps) => {
         }
       }
 
-      // Отправляем сообщение
+      // Отправляем сообщение через REST API
       await api.post('/api/messages', {
         chat_id: chatId,
         content: content.trim(),
@@ -57,7 +108,17 @@ const MessageInput = ({ chatId, onMessageSent }: MessageInputProps) => {
       // Очищаем форму
       setContent('')
       setFile(null)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
       onMessageSent()
+
+      // Сбрасываем высоту textarea
+      const textarea = document.querySelector('textarea')
+      if (textarea) {
+        textarea.style.height = 'auto'
+      }
+
     } catch (err: any) {
       console.error('Ошибка отправки сообщения:', err)
       if (err.response?.status === 400) {
@@ -80,27 +141,16 @@ const MessageInput = ({ chatId, onMessageSent }: MessageInputProps) => {
     }
   }
 
-  // Изменение текста (для индикатора набора)
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setContent(e.target.value)
-    if (!typing) {
-      setTyping(true)
-      setTimeout(() => setTyping(false), 3000)
-    }
-  }
-
-  // Выбор файла
+  // Выбор файла (без изменений)
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0]
 
-      // Проверка размера файла (макс 10MB)
       if (selectedFile.size > 10 * 1024 * 1024) {
         alert('Файл слишком большой. Максимальный размер: 10MB')
         return
       }
 
-      // Проверка типа файла
       const allowedTypes = [
         'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp',
         'video/mp4', 'video/avi', 'video/mov', 'video/mkv', 'video/webm',
@@ -149,6 +199,15 @@ const MessageInput = ({ chatId, onMessageSent }: MessageInputProps) => {
     target.style.height = `${Math.min(target.scrollHeight, 120)}px`
   }
 
+  // Очистка таймера при размонтировании
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current)
+      }
+    }
+  }, [])
+
   return (
     <div className="border-t bg-white p-3">
       {/* Превью файла */}
@@ -168,6 +227,7 @@ const MessageInput = ({ chatId, onMessageSent }: MessageInputProps) => {
               onClick={removeFile}
               className="p-1 hover:bg-red-100 rounded-full text-red-500"
               type="button"
+              disabled={uploading}
             >
               <X size={16} />
             </button>
@@ -196,6 +256,7 @@ const MessageInput = ({ chatId, onMessageSent }: MessageInputProps) => {
           onChange={handleFileChange}
           className="hidden"
           accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar"
+          disabled={uploading}
         />
 
         {/* Поле ввода текста */}
@@ -203,7 +264,7 @@ const MessageInput = ({ chatId, onMessageSent }: MessageInputProps) => {
           <textarea
             value={content}
             onChange={handleInputChange}
-            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyPress}
             onInput={handleTextareaInput}
             placeholder="Напишите сообщение..."
             className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -213,7 +274,7 @@ const MessageInput = ({ chatId, onMessageSent }: MessageInputProps) => {
           />
 
           {/* Индикатор набора текста */}
-          {typing && content.trim() && (
+          {typing && (
             <div className="absolute -top-6 left-0 text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
               печатает...
             </div>

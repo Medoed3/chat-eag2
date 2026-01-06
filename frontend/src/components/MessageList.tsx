@@ -1,14 +1,9 @@
-// frontend/src/components/MessageList.tsx
-import { useEffect, useRef, useState, useCallback } from 'react'
+// frontend/src/components/MessageList.tsx - упрощенная версия
+import { useEffect, useRef, useState } from 'react'
 import { Message, User } from '../types'
 import { formatTime } from '../utils/formatTime'
 import api from '../services/api'
-
-interface WebSocketMessage {
-  type: string
-  message?: Message
-  data?: any
-}
+import { useWebSocket } from '../hooks/useWebSocket'
 
 const MessageList = ({
   chatId,
@@ -19,14 +14,13 @@ const MessageList = ({
 }) => {
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
+  const [typingUsers, setTypingUsers] = useState<Set<number>>(new Set())
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const ws = useRef<WebSocket | null>(null)
-  const reconnectTimeout = useRef<NodeJS.Timeout | null>(null)
 
-  // Загрузка сообщений
+  // Загрузка сообщений при смене чата
   useEffect(() => {
     const loadMessages = async () => {
-      if (!chatId) return
+      if (!chatId || !currentUser) return
 
       setLoading(true)
       try {
@@ -36,129 +30,61 @@ const MessageList = ({
         setMessages(response.data || [])
       } catch (err: any) {
         console.error('Ошибка загрузки сообщений:', err)
-        if (err.response?.status === 403) {
-          console.error('Нет доступа к этому чату')
-        }
       } finally {
         setLoading(false)
       }
     }
 
     loadMessages()
-  }, [chatId])
+  }, [chatId, currentUser])
+
+  // WebSocket соединение
+  const { send } = useWebSocket(chatId, {
+    onMessage: (data) => {
+      if (data.type === 'new_message' && data.message) {
+        const newMessage = data.message
+        if (newMessage.chat_id === chatId) {
+          setMessages(prev => {
+            const exists = prev.some(m => m.id === newMessage.id)
+            if (exists) return prev
+
+            const updated = [...prev, newMessage]
+            updated.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+            return updated
+          })
+
+          // Показываем уведомление если это не наше сообщение
+          if (newMessage.sender_id !== currentUser?.id) {
+            showNotification(newMessage)
+          }
+        }
+      }
+      else if (data.type === 'user_typing') {
+        const userId = data.user_id
+        const isTyping = data.is_typing !== false
+
+        setTypingUsers(prev => {
+          const newSet = new Set(prev)
+          if (isTyping && userId !== currentUser?.id) {
+            newSet.add(userId)
+          } else {
+            newSet.delete(userId)
+          }
+          return newSet
+        })
+      }
+      else if (data.type === 'message_read') {
+        setMessages(prev => prev.map(msg =>
+          msg.id === data.message_id ? { ...msg, is_read: true } : msg
+        ))
+      }
+    }
+  })
 
   // Автопрокрутка вниз при новых сообщениях
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
-
-  // WebSocket подключение
-  const connectWebSocket = useCallback(() => {
-    if (!chatId || !currentUser) return
-
-    const token = localStorage.getItem('access_token')
-    if (!token) {
-      console.error('Токен не найден')
-      return
-    }
-
-    // Закрываем существующее соединение
-    if (ws.current) {
-      ws.current.close()
-    }
-
-    // Создаем новое соединение
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const host = window.location.hostname
-    const port = window.location.port || (protocol === 'wss:' ? '443' : '8000')
-    const wsUrl = `${protocol}//${host}:${port}/api/ws/${chatId}?token=${token}`
-
-    const socket = new WebSocket(wsUrl)
-
-    socket.onopen = () => {
-      console.log('WebSocket подключён к чату:', chatId)
-      if (reconnectTimeout.current) {
-        clearTimeout(reconnectTimeout.current)
-        reconnectTimeout.current = null
-      }
-    }
-
-    socket.onmessage = (event) => {
-      try {
-        const data: WebSocketMessage = JSON.parse(event.data)
-
-        if (data.type === 'new_message' && data.message) {
-          const newMessage = data.message
-          // Проверяем, что сообщение для этого чата и не дублируется
-          if (newMessage.chat_id === chatId) {
-            setMessages(prev => {
-              const exists = prev.some(m => m.id === newMessage.id)
-              if (exists) return prev
-              return [...prev, newMessage]
-            })
-
-            // Показываем уведомление, если сообщение не от текущего пользователя
-            if (newMessage.sender_id !== currentUser?.id) {
-              showNotification(newMessage)
-            }
-          }
-        } else if (data.type === 'user_typing') {
-          // Обработка индикатора набора текста
-          console.log('Пользователь печатает:', data)
-        }
-      } catch (err) {
-        console.error('Ошибка парсинга WebSocket сообщения:', err)
-      }
-    }
-
-    socket.onclose = (event) => {
-      console.log('WebSocket закрыт:', event.code, event.reason)
-
-      // Пытаемся переподключиться только при ненормальном закрытии
-      if (event.code !== 1000) {
-        if (!reconnectTimeout.current) {
-          reconnectTimeout.current = setTimeout(() => {
-            console.log('Переподключение WebSocket...')
-            connectWebSocket()
-          }, 3000)
-        }
-      }
-    }
-
-    socket.onerror = (error) => {
-      console.error('WebSocket ошибка:', error)
-    }
-
-    ws.current = socket
-
-    // Очистка при размонтировании
-    return () => {
-      if (ws.current) {
-        ws.current.close()
-      }
-      if (reconnectTimeout.current) {
-        clearTimeout(reconnectTimeout.current)
-      }
-    }
-  }, [chatId, currentUser])
-
-  // Инициализация WebSocket
-  useEffect(() => {
-    if (chatId && currentUser) {
-      connectWebSocket()
-    }
-
-    return () => {
-      if (ws.current) {
-        ws.current.close()
-        ws.current = null
-      }
-      if (reconnectTimeout.current) {
-        clearTimeout(reconnectTimeout.current)
-        reconnectTimeout.current = null
-      }
-    }
-  }, [connectWebSocket])
 
   // Запрос разрешения на уведомления
   useEffect(() => {
@@ -169,22 +95,28 @@ const MessageList = ({
 
   // Показ уведомления
   const showNotification = (msg: Message) => {
-    if ('Notification' in window && Notification.permission === 'granted') {
-      const senderName = msg.sender_id === currentUser?.id ? 'Вы' :
-                        (msg as any).sender_name || 'Пользователь'
-      const body = msg.content ?
-                  (msg.content.length > 50 ? msg.content.substring(0, 50) + '...' : msg.content) :
-                  '📎 Фото, видео или файл'
-
-      new Notification(`${senderName}:`, {
-        body,
-        icon: '/pwa-192x192.png',
-        tag: `chat_${chatId}`
-      })
+    if (!('Notification' in window) || Notification.permission !== 'granted') {
+      return
     }
+
+    if (document.visibilityState === 'visible') {
+      return
+    }
+
+    const senderName = msg.sender_id === currentUser?.id ? 'Вы' :
+                      (msg as any).sender_name || 'Пользователь'
+    const body = msg.content ?
+                (msg.content.length > 50 ? msg.content.substring(0, 50) + '...' : msg.content) :
+                '📎 Фото, видео или файл'
+
+    new Notification(`${senderName}:`, {
+      body,
+      icon: '/pwa-192x192.png',
+      tag: `chat_${chatId}`
+    })
   }
 
-  // Рендер вложения
+  // Рендер вложения (без изменений)
   const renderFile = (fileUrl: string, fileType: string) => {
     const fullUrl = fileUrl.startsWith('http') ? fileUrl : `http://localhost:8000${fileUrl}`
 
@@ -196,6 +128,7 @@ const MessageList = ({
             alt="Вложение"
             className="max-w-full rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
             style={{ maxHeight: '300px' }}
+            loading="lazy"
           />
         </a>
       )
@@ -206,6 +139,7 @@ const MessageList = ({
           controls
           className="max-w-full rounded cursor-pointer"
           style={{ maxHeight: '300px' }}
+          preload="metadata"
         >
           Ваш браузер не поддерживает видео
         </video>
@@ -220,13 +154,13 @@ const MessageList = ({
           className="inline-flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
         >
           <span className="text-lg">📎</span>
-          <span className="text-blue-600 font-medium">{fileName}</span>
+          <span className="text-blue-600 font-medium truncate max-w-xs">{fileName}</span>
         </a>
       )
     }
   }
 
-  // Группировка сообщений по дням
+  // Группировка сообщений по дням (без изменений)
   const groupMessagesByDate = () => {
     const groups: { [key: string]: Message[] } = {}
 
@@ -247,6 +181,29 @@ const MessageList = ({
     return groups
   }
 
+  // Индикатор набора текста
+  const renderTypingIndicator = () => {
+    if (typingUsers.size === 0) return null
+
+    const typingCount = typingUsers.size
+    return (
+      <div className="flex mb-3 justify-start">
+        <div className="max-w-[80%] px-4 py-2 rounded-2xl bg-white text-gray-800 rounded-bl-none shadow-sm">
+          <div className="flex items-center gap-2">
+            <div className="flex space-x-1">
+              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+            <span className="text-sm text-gray-600">
+              {typingCount === 1 ? 'Кто-то печатает...' : `${typingCount} человека печатают...`}
+            </span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center bg-gray-100">
@@ -265,53 +222,58 @@ const MessageList = ({
           <div className="text-sm">Начните общение первым!</div>
         </div>
       ) : (
-        Object.entries(messageGroups).map(([date, dateMessages]) => (
-          <div key={date} className="mb-6">
-            {/* Дата */}
-            <div className="flex justify-center mb-4">
-              <div className="bg-gray-200 text-gray-600 text-xs px-3 py-1 rounded-full">
-                {date}
+        <>
+          {Object.entries(messageGroups).map(([date, dateMessages]) => (
+            <div key={date} className="mb-6">
+              {/* Дата */}
+              <div className="flex justify-center mb-4">
+                <div className="bg-gray-200 text-gray-600 text-xs px-3 py-1 rounded-full">
+                  {date}
+                </div>
               </div>
-            </div>
 
-            {/* Сообщения */}
-            {dateMessages.map((msg) => {
-              const isOwn = msg.sender_id === currentUser?.id
+              {/* Сообщения */}
+              {dateMessages.map((msg) => {
+                const isOwn = msg.sender_id === currentUser?.id
 
-              return (
-                <div
-                  key={msg.id}
-                  className={`flex mb-3 ${isOwn ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div className={`max-w-[80%] px-4 py-2 rounded-2xl ${isOwn
-                    ? 'bg-blue-600 text-white rounded-br-none'
-                    : 'bg-white text-gray-800 rounded-bl-none shadow-sm'
-                  }`}>
-                    {/* Текст сообщения */}
-                    {msg.content && (
-                      <div className="whitespace-pre-wrap break-words mb-2">
-                        {msg.content}
+                return (
+                  <div
+                    key={msg.id}
+                    className={`flex mb-3 ${isOwn ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div className={`max-w-[80%] px-4 py-2 rounded-2xl ${isOwn
+                      ? 'bg-blue-600 text-white rounded-br-none'
+                      : 'bg-white text-gray-800 rounded-bl-none shadow-sm'
+                    }`}>
+                      {/* Текст сообщения */}
+                      {msg.content && (
+                        <div className="whitespace-pre-wrap break-words mb-2">
+                          {msg.content}
+                        </div>
+                      )}
+
+                      {/* Файл */}
+                      {msg.file_url && msg.file_type && (
+                        <div className="mb-2">
+                          {renderFile(msg.file_url, msg.file_type)}
+                        </div>
+                      )}
+
+                      {/* Время */}
+                      <div className={`text-xs ${isOwn ? 'text-blue-100' : 'text-gray-500'}`}>
+                        {formatTime(new Date(msg.timestamp))}
+                        {msg.is_read && isOwn && ' ✓✓'}
                       </div>
-                    )}
-
-                    {/* Файл */}
-                    {msg.file_url && msg.file_type && (
-                      <div className="mb-2">
-                        {renderFile(msg.file_url, msg.file_type)}
-                      </div>
-                    )}
-
-                    {/* Время */}
-                    <div className={`text-xs ${isOwn ? 'text-blue-100' : 'text-gray-500'}`}>
-                      {formatTime(new Date(msg.timestamp))}
-                      {msg.is_read && isOwn && ' ✓✓'}
                     </div>
                   </div>
-                </div>
-              )
-            })}
-          </div>
-        ))
+                )
+              })}
+            </div>
+          ))}
+
+          {/* Индикатор набора текста */}
+          {renderTypingIndicator()}
+        </>
       )}
       <div ref={messagesEndRef} />
     </div>

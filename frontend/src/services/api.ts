@@ -1,14 +1,14 @@
+// frontend/src/services/api.ts
 import axios from 'axios'
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+
 const api = axios.create({
-  baseURL: 'http://localhost:8000',
+  baseURL: BACKEND_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 })
-
-// Убираем ПОЛНОСТЬЮ эту строку:
-// delete api.defaults.headers.common['Authorization']
 
 api.interceptors.request.use(
   (config) => {

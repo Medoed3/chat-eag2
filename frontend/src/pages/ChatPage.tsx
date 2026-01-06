@@ -337,7 +337,10 @@ export default function ChatPage() {
             {/* Ввод сообщения */}
             <MessageInput
               chatId={selectedChat.id}
-              onMessageSent={() => {}}
+              onMessageSent={() => {
+                // Можем добавить обновление списка чатов или другие действия
+              }}
+              currentUserId={user?.id}
             />
           </div>
         )}
