@@ -342,4 +342,4 @@ ehthumbs_vista.db
 *~
 
 # Visual Studio Code
-.history
+.history.DS_Store
