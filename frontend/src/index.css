@@ -1,0 +1,156 @@
+/* frontend/src/index.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Базовые стили */
+@layer base {
+  :root {
+    --primary: #0088cc;
+    --primary-dark: #0077b3;
+    --primary-light: #e6f7ff;
+  }
+
+  body {
+    @apply antialiased text-gray-900 bg-gray-50;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  }
+
+  /* Скрываем scrollbar но оставляем функциональность */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Кастомный scrollbar */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 3px;
+  }
+}
+
+/* Кастомные классы */
+@layer components {
+  /* Карточки */
+  .card {
+    @apply bg-white rounded-2xl shadow-sm border border-gray-200;
+  }
+
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-md hover:-translate-y-0.5;
+  }
+
+  /* Сообщения */
+  .message-bubble {
+    @apply px-4 py-3 rounded-2xl max-w-[85%] break-words;
+  }
+
+  .message-bubble-own {
+    @apply bg-[#0088cc] text-white rounded-br-md;
+  }
+
+  .message-bubble-other {
+    @apply bg-gray-100 text-gray-900 rounded-bl-md;
+  }
+
+  /* Инпут */
+  .input-modern {
+    @apply w-full px-4 py-3
+           bg-white border border-gray-300 rounded-xl
+           text-gray-900 placeholder-gray-500
+           focus:outline-none focus:ring-2 focus:ring-[#0088cc] focus:border-transparent
+           transition-all duration-200
+           disabled:bg-gray-100 disabled:cursor-not-allowed;
+  }
+
+  /* Скелетоны */
+  .skeleton {
+    @apply bg-gray-200 animate-pulse rounded;
+  }
+
+  /* Градиенты */
+  .gradient-primary {
+    @apply bg-gradient-to-br from-[#0088cc] to-[#00a2ff];
+  }
+
+  .gradient-bg {
+    @apply bg-gradient-to-br from-gray-50 via-white to-gray-100;
+  }
+}
+
+/* Анимации */
+@layer utilities {
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+
+  .animate-glow {
+    animation: glow 2s ease-in-out infinite;
+  }
+
+  .animate-shimmer {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.4) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes glow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Темная тема (опционально) */
+@media (prefers-color-scheme: dark) {
+  .dark {
+    --bg-primary: #1a202c;
+    --bg-secondary: #2d3748;
+    --text-primary: #f7fafc;
+    --text-secondary: #cbd5e0;
+  }
+}

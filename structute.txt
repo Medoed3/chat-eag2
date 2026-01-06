@@ -1,0 +1,96 @@
+Project Structure (.)
+Generated on: 2026-01-05 21:11:37
+==================================================
+├── backend
+│   ├── __init__.py
+│   ├── api
+│   │   ├── admin.py
+│   │   ├── chats.py
+│   │   ├── media.py
+│   │   ├── messages.py
+│   │   ├── push.py
+│   │   └── users.py
+│   ├── auth.py
+│   ├── backend
+│   │   └── static
+│   │       └── media
+│   │           ├── documents
+│   │           │   └── 5b9c2d9f-252a-4275-ba9e-e7beef232c9d.py
+│   │           └── images
+│   │               └── 82c29e33-723f-4bd7-80b4-493ff6db56ed.jpg
+│   ├── create_admin.py
+│   ├── database.py
+│   ├── main.py
+│   ├── messenger.db
+│   ├── models.py
+│   ├── requirements.txt
+│   ├── schemas.py
+│   ├── static
+│   │   └── media
+│   │       ├── documents
+│   │       ├── images
+│   │       └── videos
+│   └── utils
+│       ├── security.py
+│       └── upload.py
+├── frontend
+│   ├── dev-dist
+│   │   ├── registerSW.js
+│   │   ├── suppress-warnings.js
+│   │   ├── sw.js
+│   │   └── workbox-5a5d9309.js
+│   ├── index.html
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── postcss.config.js
+│   ├── public
+│   │   ├── icons
+│   │   ├── manifest.json
+│   │   ├── offline.html
+│   │   ├── pwa-192x192.png
+│   │   ├── pwa-512x512.png
+│   │   ├── pwa-64x64.png
+│   │   ├── src-sw.js
+│   │   └── sw.js
+│   ├── src
+│   │   ├── App.tsx
+│   │   ├── components
+│   │   │   ├── AdminLayout.tsx
+│   │   │   ├── ChatList.tsx
+│   │   │   ├── CreateGroupModal.tsx
+│   │   │   ├── LoadingScreen.tsx
+│   │   │   ├── MessageInput.tsx
+│   │   │   ├── MessageList.tsx
+│   │   │   ├── Sidebar.tsx
+│   │   │   └── ui
+│   │   │       ├── Avatar.tsx
+│   │   │       ├── Button.tsx
+│   │   │       └── Input.tsx
+│   │   ├── hooks
+│   │   │   └── useAuth.tsx
+│   │   ├── index.css
+│   │   ├── main.tsx
+│   │   ├── pages
+│   │   │   ├── AdminPage.tsx
+│   │   │   ├── ChatPage.tsx
+│   │   │   ├── LoginPage.tsx
+│   │   │   └── admin
+│   │   │       ├── ChatMembersPage.tsx
+│   │   │       ├── ChatsPage.tsx
+│   │   │       ├── CreateChatPage.tsx
+│   │   │       ├── CreateUserPage.tsx
+│   │   │       ├── DashboardPage.tsx
+│   │   │       ├── EditChatPage.tsx
+│   │   │       ├── EditUserPage.tsx
+│   │   │       └── UsersPage.tsx
+│   │   ├── services
+│   │   │   └── api.ts
+│   │   ├── types.ts
+│   │   └── utils
+│   │       └── formatTime.ts
+│   ├── tailwind.config.js
+│   ├── tsconfig.json
+│   ├── tsconfig.node.json
+│   └── vite.config.ts
+├── structute.txt
+└── tree.py
