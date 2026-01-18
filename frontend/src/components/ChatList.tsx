@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Chat, User } from '../types'
-import api from '../services/api'
+import { api } from '../services/api'
 import CreateGroupModal from './CreateGroupModal' // ✅ Добавлен импорт
 
 interface ChatListProps {

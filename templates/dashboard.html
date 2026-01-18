@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мониторинг мессенджера</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .header .subtitle {
+            opacity: 0.9;
+            font-size: 0.9rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+
+        .status-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .status-card {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+        }
+
+        .status-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        .status-card h3 {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .status-card .trend {
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .status-card.healthy .value {
+            color: #10b981;
+        }
+
+        .status-card.warning .value {
+            color: #f59e0b;
+        }
+
+        .status-card.error .value {
+            color: #ef4444;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        .chart-container h3 {
+            margin-bottom: 1rem;
+            color: #444;
+        }
+
+        .alerts {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        .alerts h3 {
+            margin-bottom: 1rem;
+            color: #444;
+        }
+
+        .alert-list {
+            list-style: none;
+        }
+
+        .alert-item {
+            padding: 1rem;
+            border-left: 4px solid #ddd;
+            margin-bottom: 0.5rem;
+            background: #f9f9f9;
+            border-radius: 0 4px 4px 0;
+        }
+
+        .alert-item.error {
+            border-left-color: #ef4444;
+            background: #fee;
+        }
+
+        .alert-item.warning {
+            border-left-color: #f59e0b;
+            background: #fffbeb;
+        }
+
+        .alert-item.info {
+            border-left-color: #3b82f6;
+            background: #eff6ff;
+        }
+
+        .alert-item .time {
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: 0.5rem;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 2rem;
+            padding: 1rem;
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .last-update {
+            display: inline-block;
+            background: #e5e7eb;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            margin-top: 1rem;
+        }
+
+        .refresh-btn {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
+            transition: all 0.2s;
+        }
+
+        .refresh-btn:hover {
+            background: #2563eb;
+            transform: scale(1.1);
+        }
+
+        .refresh-btn:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="container">
+            <h1>📊 Мониторинг корпоративного мессенджера</h1>
+            <div class="subtitle">Система гарантированной доставки сообщений</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Статус системы -->
+        <div class="status-bar" id="statusBar">
+            <!-- Заполняется JavaScript -->
+        </div>
+
+        <!-- Графики -->
+        <div class="charts-grid">
+            <div class="chart-container">
+                <h3>Пользователи онлайн</h3>
+                <canvas id="usersChart"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <h3>Статус сообщений</h3>
+                <canvas id="messagesChart"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <h3>Время доставки (секунды)</h3>
+                <canvas id="deliveryChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Алерты -->
+        <div class="alerts">
+            <h3>🔔 Системные оповещения</h3>
+            <ul class="alert-list" id="alertsList">
+                <!-- Заполняется JavaScript -->
+            </ul>
+        </div>
+
+        <!-- Обновление -->
+        <div class="footer">
+            <div class="last-update" id="lastUpdate">
+                Загрузка данных...
+            </div>
+        </div>
+    </div>
+
+    <!-- Кнопка обновления -->
+    <button class="refresh-btn" onclick="loadData()">
+        ↻
+    </button>
+
+    <script>
+        let usersChart = null;
+        let messagesChart = null;
+        let deliveryChart = null;
+
+        // Загрузка данных
+        async function loadData() {
+            try {
+                // Обновляем кнопку
+                const btn = document.querySelector('.refresh-btn');
+                btn.innerHTML = '⏳';
+                btn.disabled = true;
+
+                // Загружаем данные
+                const [dashboardRes, alertsRes] = await Promise.all([
+                    axios.get('/api/dashboard/data'),
+                    axios.get('/api/dashboard/alerts')
+                ]);
+
+                const data = dashboardRes.data;
+                const alerts = alertsRes.data.alerts;
+
+                // Обновляем статус
+                updateStatusBar(data);
+
+                // Обновляем графики
+                updateCharts(data);
+
+                // Обновляем алерты
+                updateAlerts(alerts);
+
+                // Обновляем время
+                document.getElementById('lastUpdate').textContent =
+                    `Последнее обновление: ${new Date().toLocaleTimeString()}`;
+
+            } catch (error) {
+                console.error('Error loading data:', error);
+                document.getElementById('lastUpdate').textContent =
+                    'Ошибка загрузки данных';
+            } finally {
+                // Восстанавливаем кнопку
+                const btn = document.querySelector('.refresh-btn');
+                btn.innerHTML = '↻';
+                btn.disabled = false;
+            }
+        }
+
+        // Обновление статус-бара
+        function updateStatusBar(data) {
+            const statusBar = document.getElementById('statusBar');
+
+            if (!data.stats) return;
+
+            const stats = data.stats;
+            const health = data.health;
+
+            const statusCards = [
+                {
+                    title: 'Статус системы',
+                    value: health?.status === 'healthy' ? '✅ Работает' : '⚠️ Проблемы',
+                    trend: '',
+                    className: health?.status === 'healthy' ? 'healthy' : 'warning'
+                },
+                {
+                    title: 'Пользователи онлайн',
+                    value: stats.users?.online || 0,
+                    trend: `Всего: ${stats.users?.total || 0}`,
+                    className: 'healthy'
+                },
+                {
+                    title: 'Активные чаты',
+                    value: stats.chats?.active || 0,
+                    trend: `Всего: ${stats.chats?.total || 0}`,
+                    className: 'healthy'
+                },
+                {
+                    title: 'Сообщений сегодня',
+                    value: stats.messages?.new_24h || 0,
+                    trend: `Всего: ${stats.messages?.total || 0}`,
+                    className: 'healthy'
+                },
+                {
+                    title: 'Доставлено',
+                    value: `${stats.messages?.delivery_rate?.toFixed(1) || 0}%`,
+                    trend: `${stats.messages?.delivered || 0} из ${stats.messages?.total || 0}`,
+                    className: stats.messages?.delivery_rate > 95 ? 'healthy' : 'warning'
+                },
+                {
+                    title: 'Прочитано',
+                    value: `${stats.messages?.read_rate?.toFixed(1) || 0}%`,
+                    trend: `${stats.messages?.read || 0} из ${stats.messages?.total || 0}`,
+                    className: stats.messages?.read_rate > 90 ? 'healthy' : 'warning'
+                }
+            ];
+
+            statusBar.innerHTML = statusCards.map(card => `
+                <div class="status-card ${card.className}">
+                    <h3>${card.title}</h3>
+                    <div class="value">${card.value}</div>
+                    <div class="trend">${card.trend}</div>
+                </div>
+            `).join('');
+        }
+
+        // Обновление графиков
+        function updateCharts(data) {
+            const charts = data.charts || {};
+
+            // График пользователей онлайн
+            if (usersChart) {
+                usersChart.destroy();
+            }
+
+            const usersCtx = document.getElementById('usersChart').getContext('2d');
+            usersChart = new Chart(usersCtx, {
+                type: 'line',
+                data: {
+                    labels: Array.from({length: 10}, (_, i) => i * 10 + ' сек'),
+                    datasets: [{
+                        label: 'Онлайн пользователи',
+                        data: Array.from({length: 10}, () => charts.users_online?.current || 0),
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Пользователи'
+                            }
+                        }
+                    }
+                }
+            });
+
+            // График статуса сообщений
+            if (messagesChart) {
+                messagesChart.destroy();
+            }
+
+            const messagesCtx = document.getElementById('messagesChart').getContext('2d');
+            messagesChart = new Chart(messagesCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Доставлено', 'Прочитано', 'В ожидании', 'Ошибка'],
+                    datasets: [{
+                        data: [
+                            charts.messages?.delivered || 0,
+                            charts.messages?.read || 0,
+                            charts.messages?.pending || 0,
+                            charts.messages?.failed || 0
+                        ],
+                        backgroundColor: [
+                            '#10b981',
+                            '#3b82f6',
+                            '#f59e0b',
+                            '#ef4444'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // График времени доставки
+            if (deliveryChart) {
+                deliveryChart.destroy();
+            }
+
+            const deliveryCtx = document.getElementById('deliveryChart').getContext('2d');
+            deliveryChart = new Chart(deliveryCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Среднее', 'Медиана', 'P95', 'P99'],
+                    datasets: [{
+                        label: 'Время (сек)',
+                        data: [
+                            charts.delivery_times?.mean || 0,
+                            charts.delivery_times?.median || 0,
+                            charts.delivery_times?.p95 || 0,
+                            charts.delivery_times?.p99 || 0
+                        ],
+                        backgroundColor: [
+                            'rgba(59, 130, 246, 0.7)',
+                            'rgba(16, 185, 129, 0.7)',
+                            'rgba(245, 158, 11, 0.7)',
+                            'rgba(239, 68, 68, 0.7)'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Секунды'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Обновление алертов
+        function updateAlerts(alerts) {
+            const alertsList = document.getElementById('alertsList');
+
+            if (!alerts || alerts.length === 0) {
+                alertsList.innerHTML = '<li class="alert-item info">✅ Нет активных оповещений</li>';
+                return;
+            }
+
+            alertsList.innerHTML = alerts.map(alert => `
+                <li class="alert-item ${alert.level}">
+                    <div class="message">${alert.message}</div>
+                    ${alert.details ? `<div class="details">${JSON.stringify(alert.details)}</div>` : ''}
+                    <div class="time">${new Date(alert.timestamp).toLocaleString()}</div>
+                </li>
+            `).join('');
+        }
+
+        // Автоматическое обновление каждые 10 секунд
+        setInterval(loadData, 10000);
+
+        // Первоначальная загрузка
+        loadData();
+    </script>
+</body>
+</html>

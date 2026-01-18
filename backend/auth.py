@@ -1,6 +1,7 @@
 # backend/auth.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from jose import jwt, JWTError
 
@@ -65,3 +66,27 @@ def login(
         "token_type": "bearer",
         "user": schemas.UserResponse.model_validate(user)
     }
+
+
+@router.post("/logout")
+async def logout():
+    """
+    Выход из системы
+    Примечание: JWT токены являются stateless, поэтому этот endpoint
+    в основном для клиента, чтобы очистить локальные данные.
+    В будущем можно реализовать черный список токенов.
+    """
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={"message": "Успешный выход из системы"}
+    )
+
+
+@router.get("/me", response_model=schemas.UserResponse)
+async def get_current_user_info(
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Получение информации о текущем пользователе
+    """
+    return current_user

@@ -1,6 +1,6 @@
 // frontend/src/components/CreateGroupModal.tsx
 import { useState, useEffect } from 'react'
-import api from '../services/api'
+import { api } from '../services/api'
 import { User } from '../types'
 
 interface CreateGroupModalProps {

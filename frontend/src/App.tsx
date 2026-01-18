@@ -1,92 +1,187 @@
 // frontend/src/App.tsx
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
-import { Suspense, lazy } from 'react'
-import { useAuth } from './hooks/useAuth'
-import LoginPage from './pages/LoginPage'
-import ChatPage from './pages/ChatPage'
-import AdminPage from './pages/AdminPage'
-import LoadingScreen from './components/LoadingScreen'
+import React, { useEffect, useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import LoginPage from './pages/LoginPage';
+import ChatPage from './pages/ChatPage';
+import AdminLayout from './components/AdminLayout';
+import DashboardPage from './pages/admin/DashboardPage';
+import UsersPage from './pages/admin/UsersPage';
+import AdminChatsPage from './pages/admin/AdminChatsPage';
+import ChatMembersPage from './pages/admin/ChatMembersPage';
+import CreateUserPage from './pages/admin/CreateUserPage';
+import EditUserPage from './pages/admin/EditUserPage';
+import CreateChatPage from './pages/admin/CreateChatPage';
+import EditChatPage from './pages/admin/EditChatPage';
+import { useAuth, AuthProvider } from './hooks/useAuth';
+import { messageSyncService } from './services/messageSync';
+import LoadingScreen from './components/LoadingScreen';
+import './index.css';
 
-// Ленивая загрузка для оптимизации
-// const ChatPage = lazy(() => import('./pages/ChatPage'))
-// const AdminPage = lazy(() => import('./pages/AdminPage'))
+// Компонент для защищенных роутов
+const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isAuthenticated, isLoading } = useAuth();
+  const location = useLocation();
 
-function PrivateRoute({ children, requireAdmin = false }: { 
-  children: React.ReactNode
-  requireAdmin?: boolean 
-}) {
-  const { user, loading } = useAuth()
-
-  if (loading) {
-    return <LoadingScreen />
+  if (isLoading) {
+    return <LoadingScreen message="Проверка авторизации..." />;
   }
 
-  if (!user) {
-    return <Navigate to="/login" replace />
+  if (!isAuthenticated) {
+    // Сохраняем текущий путь для редиректа после входа
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (requireAdmin && user.role !== 'admin') {
-    return <Navigate to="/chat" replace />
+  return <>{children}</>;
+};
+
+// Компонент для административных роутов
+const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isAuthenticated, isLoading, user } = useAuth();
+  const location = useLocation();
+
+  if (isLoading) {
+    return <LoadingScreen message="Проверка прав доступа..." />;
   }
 
-  return <>{children}</>
-}
-
-function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth()
-
-  if (loading) {
-    return <LoadingScreen />
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (user) {
-    return <Navigate to="/chat" replace />
+  if (user?.role !== 'admin') {
+    // Перенаправляем в мессенджер, если не админ
+    return <Navigate to="/chat" state={{ from: location }} replace />;
   }
 
-  return <>{children}</>
-}
+  return <>{children}</>;
+};
 
-function App() {
+// Основной компонент приложения с маршрутами
+function AppContent() {
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [showOfflineWarning, setShowOfflineWarning] = useState(false);
+
+  // Отслеживаем онлайн/оффлайн статус
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      setShowOfflineWarning(false);
+
+      // При восстановлении соединения восстанавливаем очередь
+      messageSyncService.restoreFromLocalStorage().catch(console.error);
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      setShowOfflineWarning(true);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Восстанавливаем очередь при загрузке
+  useEffect(() => {
+    messageSyncService.restoreFromLocalStorage().catch(console.error);
+  }, []);
+
   return (
-    <Router>
-      <Suspense fallback={<LoadingScreen />}>
-        <Routes>
-          <Route path="/login" element={
-            <PublicRoute>
-              <LoginPage />
-            </PublicRoute>
-          } />
-          
-          <Route path="/chat" element={
+    <div className="App">
+      {/* Оффлайн предупреждение */}
+      {showOfflineWarning && (
+        <div className="fixed top-0 left-0 right-0 bg-red-500 text-white p-2 text-center z-50">
+          <div className="container mx-auto flex items-center justify-between">
+            <span>⚠️ Вы сейчас не в сети. Сообщения будут сохранены и отправлены позже.</span>
+            <button
+              onClick={() => setShowOfflineWarning(false)}
+              className="text-white hover:text-gray-200 text-xl"
+              aria-label="Закрыть уведомление"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Онлайн уведомление */}
+      {!isOnline && (
+        <div className="fixed top-0 left-0 right-0 bg-green-500 text-white p-2 text-center z-50">
+          <div className="container mx-auto flex items-center justify-between">
+            <span>✅ Восстановлено соединение. Синхронизация...</span>
+            <button
+              onClick={() => setShowOfflineWarning(false)}
+              className="text-white hover:text-gray-200 text-xl"
+              aria-label="Закрыть уведомление"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
+      <Routes>
+        {/* Публичные маршруты */}
+        <Route path="/login" element={<LoginPage />} />
+
+        {/* Защищенные маршруты мессенджера */}
+        <Route
+          path="/chat/:chatId?"
+          element={
             <PrivateRoute>
               <ChatPage />
             </PrivateRoute>
-          } />
-          
-          <Route path="/admin/*" element={
-            <PrivateRoute requireAdmin>
-              <AdminPage />
+          }
+        />
+
+        <Route
+          path="/"
+          element={
+            <PrivateRoute>
+              <Navigate to="/chat" replace />
             </PrivateRoute>
-          } />
-          
-          <Route path="/" element={<Navigate to="/chat" replace />} />
-          
-          <Route path="*" element={
-            <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
-              <h1 className="text-2xl font-bold text-gray-800 mb-2">404</h1>
-              <p className="text-gray-600">Страница не найдена</p>
-              <a 
-                href="/chat" 
-                className="mt-4 text-[#0088cc] hover:text-[#0077b3]"
-              >
-                Вернуться к чатам
-              </a>
-            </div>
-          } />
-        </Routes>
-      </Suspense>
-    </Router>
-  )
+          }
+        />
+
+        {/* Административные маршруты */}
+        <Route
+          path="/admin"
+          element={
+            <AdminRoute>
+              <AdminLayout />
+            </AdminRoute>
+          }
+        >
+          <Route index element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="users" element={<UsersPage />} />
+          <Route path="users/create" element={<CreateUserPage />} />
+          <Route path="users/:userId/edit" element={<EditUserPage />} />
+          <Route path="chats" element={<AdminChatsPage />} />
+          <Route path="chats/create" element={<CreateChatPage />} />
+          <Route path="chats/:chatId/edit" element={<EditChatPage />} />
+          <Route path="chats/:chatId/members" element={<ChatMembersPage />} />
+        </Route>
+
+        {/* 404 - перенаправляем в мессенджер */}
+        <Route path="*" element={<Navigate to="/chat" replace />} />
+      </Routes>
+    </div>
+  );
 }
 
-export default App
+// Главный компонент с провайдерами
+function App() {
+  return (
+    <Router>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </Router>
+  );
+}
+
+export default App;

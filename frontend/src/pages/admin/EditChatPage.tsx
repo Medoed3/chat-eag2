@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import api from '../../services/api'
+import { api } from '../../services/api'
 
 export default function EditChatPage() {
   const { id } = useParams<{ id: string }>()

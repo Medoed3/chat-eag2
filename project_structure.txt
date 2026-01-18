@@ -1,6 +1,8 @@
 Project Structure (.)
-Generated on: 2026-01-05 21:11:37
+Generated on: 2026-01-07 15:59:55
 ==================================================
+├── README.md
+├── arh.txt
 ├── backend
 │   ├── __init__.py
 │   ├── api
@@ -8,6 +10,7 @@ Generated on: 2026-01-05 21:11:37
 │   │   ├── chats.py
 │   │   ├── media.py
 │   │   ├── messages.py
+│   │   ├── metrics.py
 │   │   ├── push.py
 │   │   └── users.py
 │   ├── auth.py
@@ -18,21 +21,33 @@ Generated on: 2026-01-05 21:11:37
 │   │           │   └── 5b9c2d9f-252a-4275-ba9e-e7beef232c9d.py
 │   │           └── images
 │   │               └── 82c29e33-723f-4bd7-80b4-493ff6db56ed.jpg
+│   ├── config
+│   │   └── production.py
 │   ├── create_admin.py
 │   ├── database.py
+│   ├── init_database.py
 │   ├── main.py
 │   ├── messenger.db
+│   ├── middleware
+│   │   └── metrics_middleware.py
+│   ├── migrations.py
 │   ├── models.py
 │   ├── requirements.txt
 │   ├── schemas.py
+│   ├── services
+│   │   ├── message_delivery.py
+│   │   └── metrics.py
 │   ├── static
 │   │   └── media
 │   │       ├── documents
 │   │       ├── images
+│   │       │   └── 82c29e33-723f-4bd7-80b4-493ff6db56ed.jpg
 │   │       └── videos
 │   └── utils
+│       ├── redis_client.py
 │       ├── security.py
 │       └── upload.py
+├── deploy.sh
 ├── frontend
 │   ├── dev-dist
 │   │   ├── registerSW.js
@@ -51,7 +66,8 @@ Generated on: 2026-01-05 21:11:37
 │   │   ├── pwa-512x512.png
 │   │   ├── pwa-64x64.png
 │   │   ├── src-sw.js
-│   │   └── sw.js
+│   │   ├── sw.js
+│   │   └── test-websocket.html
 │   ├── src
 │   │   ├── App.tsx
 │   │   ├── components
@@ -61,17 +77,19 @@ Generated on: 2026-01-05 21:11:37
 │   │   │   ├── LoadingScreen.tsx
 │   │   │   ├── MessageInput.tsx
 │   │   │   ├── MessageList.tsx
+│   │   │   ├── NetworkStatus.tsx
 │   │   │   ├── Sidebar.tsx
 │   │   │   └── ui
 │   │   │       ├── Avatar.tsx
 │   │   │       ├── Button.tsx
 │   │   │       └── Input.tsx
 │   │   ├── hooks
-│   │   │   └── useAuth.tsx
+│   │   │   ├── useAuth.tsx
+│   │   │   ├── useMessageSync.ts
+│   │   │   └── useWebSocket.ts
 │   │   ├── index.css
 │   │   ├── main.tsx
 │   │   ├── pages
-│   │   │   ├── AdminPage.tsx
 │   │   │   ├── ChatPage.tsx
 │   │   │   ├── LoginPage.tsx
 │   │   │   └── admin
@@ -84,13 +102,23 @@ Generated on: 2026-01-05 21:11:37
 │   │   │       ├── EditUserPage.tsx
 │   │   │       └── UsersPage.tsx
 │   │   ├── services
-│   │   │   └── api.ts
+│   │   │   ├── api.ts
+│   │   │   └── messageSync.ts
 │   │   ├── types.ts
 │   │   └── utils
-│   │       └── formatTime.ts
+│   │       ├── formatTime.ts
+│   │       └── localStorage.ts
 │   ├── tailwind.config.js
 │   ├── tsconfig.json
 │   ├── tsconfig.node.json
 │   └── vite.config.ts
+├── load_test.py
+├── monitoring_dashboard.py
+├── performance_optimization.py
+├── project_structure.txt
+├── run_local.py
 ├── structute.txt
+├── templates
+│   └── dashboard.html
+├── test_delivery.py
 └── tree.py

@@ -1,7 +1,26 @@
-fastapi
-uvicorn
-sqlalchemy
-python-jose[cryptography]
-passlib[bcrypt]
-python-multipart
-pywebpush==1.18.1
+# Основные
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+sqlalchemy==2.0.23
+
+# Аутентификация и безопасность
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+
+# Redis
+redis==5.0.1
+hiredis==2.2.3
+
+# Push-уведомления
+pywebpush==2.1.2
+
+# Утилиты
+python-dotenv==1.0.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# Для разработки
+pytest==7.4.3
+pytest-asyncio==0.21.1
+requests==2.31.0
