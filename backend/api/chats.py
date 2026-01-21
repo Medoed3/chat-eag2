@@ -232,6 +232,88 @@ def create_chat(
 # 🔧 НОВЫЕ И ИСПРАВЛЕННЫЕ ЭНДПОИНТЫ
 # -------------------------
 
+# backend/api/chats.py - ДОБАВЛЯЕМ НОВЫЙ ЭНДПОИНТ
+
+@router.post("/chats/personal/{user_id}", response_model=ChatResponse)
+def get_or_create_personal_chat(
+        user_id: int,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user)
+):
+    """
+    Получает существующий или создает новый личный чат с указанным пользователем
+    """
+    # Проверяем существование собеседника
+    other_user = db.query(User).filter(
+        User.id == user_id,
+        User.is_active == True
+    ).first()
+
+    if not other_user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден или неактивен")
+
+    # Проверяем, существует ли уже личный чат между этими пользователями
+    existing_chat = db.query(Chat).filter(
+        Chat.is_group == False,
+        or_(
+            # Вариант 1: current_user - owner, other_user - member
+            and_(
+                Chat.owner_id == current_user.id,
+                db.query(chat_members).filter(
+                    chat_members.c.chat_id == Chat.id,
+                    chat_members.c.user_id == other_user.id
+                ).exists()
+            ),
+            # Вариант 2: other_user - owner, current_user - member
+            and_(
+                Chat.owner_id == other_user.id,
+                db.query(chat_members).filter(
+                    chat_members.c.chat_id == Chat.id,
+                    chat_members.c.user_id == current_user.id
+                ).exists()
+            )
+        )
+    ).first()
+
+    if existing_chat:
+        # Если чат уже существует, возвращаем его
+        # Подтягиваем последнее сообщение
+        last_msg = db.query(Message).filter(Message.chat_id == existing_chat.id) \
+            .order_by(Message.timestamp.desc()).first()
+        existing_chat.last_message = last_msg
+        return existing_chat
+
+    # Создаем новый личный чат
+    chat = Chat(
+        is_group=False,
+        owner_id=current_user.id,
+        name=None  # У личных чатов нет названия
+    )
+    db.add(chat)
+    db.flush()  # Получаем ID чата
+
+    # Добавляем собеседника через chat_members
+    db.execute(
+        chat_members.insert().values(
+            user_id=other_user.id,
+            chat_id=chat.id
+        )
+    )
+
+    # Добавляем создателя в участники
+    db.execute(
+        chat_members.insert().values(
+            user_id=current_user.id,
+            chat_id=chat.id
+        )
+    )
+
+    db.commit()
+    db.refresh(chat)
+
+    return chat
+
+
 @router.patch("/chats/{chat_id}")
 def update_chat(
         chat_id: int,

@@ -233,3 +233,25 @@ export interface MediaUploadResponse {
   type: string;
   filename: string;
 }
+
+// Контакт с дополнительной информацией
+export interface Contact extends User {
+  last_seen?: string;
+  is_online?: boolean;
+  department?: string;
+  position?: string;
+  email?: string;
+  phone?: string;
+}
+
+// Ответ от API контактов
+export interface ContactsResponse {
+  contacts: Contact[];
+  total_count: number;
+  online_count: number;
+}
+
+// Для создания личного чата
+export interface CreatePersonalChatRequest {
+  user_id: number;
+}

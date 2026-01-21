@@ -1,8 +1,11 @@
-// frontend/src/App.tsx
+// frontend/src/App.tsx - ОБНОВЛЕННАЯ ВЕРСИЯ
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import ChatPage from './pages/ChatPage';
+import ContactsPage from './pages/ContactsPage'; // ДОБАВЛЯЕМ ИМПОРТ
+import ProfilePage from './pages/ProfilePage'; // ДОБАВЛЯЕМ ИМПОРТ
+import BottomNav from './components/BottomNav'; // ДОБАВЛЯЕМ ИМПОРТ
 import AdminLayout from './components/AdminLayout';
 import DashboardPage from './pages/admin/DashboardPage';
 import UsersPage from './pages/admin/UsersPage';
@@ -53,6 +56,23 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   }
 
   return <>{children}</>;
+};
+
+// Обертка для страниц с Bottom Navigation
+const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const location = useLocation();
+
+  // Не показываем BottomNav на некоторых страницах
+  const hideBottomNav = location.pathname === '/login' ||
+                        location.pathname.startsWith('/admin') ||
+                        location.pathname.match(/^\/chat\/\d+$/); // Не показываем в конкретном чате
+
+  return (
+    <>
+      {children}
+      {!hideBottomNav && <BottomNav />}
+    </>
+  );
 };
 
 // Основной компонент приложения с маршрутами
@@ -127,21 +147,49 @@ function AppContent() {
         {/* Публичные маршруты */}
         <Route path="/login" element={<LoginPage />} />
 
-        {/* Защищенные маршруты мессенджера */}
+        {/* Защищенные маршруты мессенджера с MainLayout */}
         <Route
           path="/chat/:chatId?"
           element={
             <PrivateRoute>
-              <ChatPage />
+              <MainLayout>
+                <ChatPage />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+
+        {/* НОВЫЕ МАРШРУТЫ: */}
+        <Route
+          path="/contacts"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <ContactsPage />
+              </MainLayout>
             </PrivateRoute>
           }
         />
 
         <Route
+          path="/profile"
+          element={
+            <PrivateRoute>
+              <MainLayout>
+                <ProfilePage />
+              </MainLayout>
+            </PrivateRoute>
+          }
+        />
+
+        {/* Дефолтный маршрут */}
+        <Route
           path="/"
           element={
             <PrivateRoute>
-              <Navigate to="/chat" replace />
+              <MainLayout>
+                <Navigate to="/chat" replace />
+              </MainLayout>
             </PrivateRoute>
           }
         />

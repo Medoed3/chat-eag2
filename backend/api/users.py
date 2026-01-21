@@ -111,3 +111,16 @@ def delete_user(
     user.is_active = False
     db.commit()
     return
+
+
+@router.get("/users/contacts", response_model=List[UserResponse])
+def get_contacts(
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user)  # Проверяем авторизацию, но не требуем админку
+):
+    """Получает список всех активных пользователей (исключая текущего)"""
+    users = db.query(User).filter(
+        User.is_active == True,
+        User.id != current_user.id  # Исключаем текущего пользователя
+    ).order_by(User.full_name).all()
+    return users

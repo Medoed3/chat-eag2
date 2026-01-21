@@ -1,5 +1,5 @@
 Project Structure (.)
-Generated on: 2026-01-07 15:59:55
+Generated on: 2026-01-21 10:18:14
 ==================================================
 ├── README.md
 ├── arh.txt
@@ -22,8 +22,10 @@ Generated on: 2026-01-07 15:59:55
 │   │           └── images
 │   │               └── 82c29e33-723f-4bd7-80b4-493ff6db56ed.jpg
 │   ├── config
+│   │   ├── development.py
 │   │   └── production.py
 │   ├── create_admin.py
+│   ├── create_test_users.py
 │   ├── database.py
 │   ├── init_database.py
 │   ├── main.py
@@ -75,8 +77,10 @@ Generated on: 2026-01-07 15:59:55
 │   │   │   ├── ChatList.tsx
 │   │   │   ├── CreateGroupModal.tsx
 │   │   │   ├── LoadingScreen.tsx
+│   │   │   ├── LogoutButton.tsx
 │   │   │   ├── MessageInput.tsx
 │   │   │   ├── MessageList.tsx
+│   │   │   ├── MobileHeader.tsx
 │   │   │   ├── NetworkStatus.tsx
 │   │   │   ├── Sidebar.tsx
 │   │   │   └── ui
@@ -93,8 +97,8 @@ Generated on: 2026-01-07 15:59:55
 │   │   │   ├── ChatPage.tsx
 │   │   │   ├── LoginPage.tsx
 │   │   │   └── admin
+│   │   │       ├── AdminChatsPage.tsx
 │   │   │       ├── ChatMembersPage.tsx
-│   │   │       ├── ChatsPage.tsx
 │   │   │       ├── CreateChatPage.tsx
 │   │   │       ├── CreateUserPage.tsx
 │   │   │       ├── DashboardPage.tsx
@@ -113,6 +117,7 @@ Generated on: 2026-01-07 15:59:55
 │   ├── tsconfig.node.json
 │   └── vite.config.ts
 ├── load_test.py
+├── messenger.db
 ├── monitoring_dashboard.py
 ├── performance_optimization.py
 ├── project_structure.txt
