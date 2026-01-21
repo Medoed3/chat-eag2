@@ -77,13 +77,21 @@ const ChatPage: React.FC = () => {
     sendMessage: syncSendMessage,
     isSyncing,
     queueStats,
-    processQueue
+    processQueue,
+    clearMessages
   } = useMessageSync({
     chatId: numericChatId,
     autoSync: true,
     syncInterval: 30000,
     onNewMessages: () => {}
   });
+
+  // Очистка сообщений при смене чата
+  useEffect(() => {
+    if (numericChatId && syncedMessages.length > 0) {
+      clearMessages();
+    }
+  }, [numericChatId, clearMessages]);
 
   // WebSocket для уведомлений
   const { isConnected, reconnect } = useWebSocket({
@@ -93,7 +101,7 @@ const ChatPage: React.FC = () => {
     reconnectDelay: 1000,
     onMessage: () => {
       if (numericChatId) {
-        sync();
+        sync(undefined, true);
       }
     },
     onConnectionChange: (connected) => {

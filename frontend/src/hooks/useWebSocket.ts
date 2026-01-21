@@ -74,6 +74,8 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
   // Обработка уведомления о новом сообщении
   const handleMessageNotification = useCallback(async (notification: any) => {
+    console.log('handleMessageNotification called with:', notification);
+    
     try {
       // Получаем полное сообщение
       const message = await fetchMessage(notification.message_id);
@@ -118,11 +120,13 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
       switch (data.type) {
         case 'connection_established':
-          setIsConnected(true);
-          setConnectionId(data.connection_id);
-          setError(null);
-          reconnectAttemptRef.current = 0;
-          onConnectionChange?.(true);
+          if (!isConnected) {
+            setIsConnected(true);
+            setConnectionId(data.connection_id);
+            setError(null);
+            reconnectAttemptRef.current = 0;
+            onConnectionChange?.(true);
+          }
 
           // Начинаем отправлять ping
           if (pingIntervalRef.current) {
@@ -135,7 +139,9 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
           }, 30000); // Ping каждые 30 секунд
           break;
 
-        case 'new_message': // ИСПРАВЛЕНО: было 'new_message_notification'
+        case 'new_message':
+    case 'new_message_notification':
+          console.log('WebSocket received message notification:', data);
           handleMessageNotification(data);
           break;
 
@@ -178,6 +184,8 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
   // Подключение к WebSocket
   const connect = useCallback(() => {
+    console.log('WebSocket.connect called', { chatId, hasToken: !!token, isConnecting, hasWs: !!wsRef.current });
+    
     if (!chatId || !token || isConnecting || wsRef.current) {
       return;
     }
@@ -196,24 +204,33 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('WebSocket connected');
+        console.log('WebSocket onopen event fired');
         setIsConnecting(false);
       };
 
-      ws.onmessage = handleWebSocketMessage;
+      ws.onmessage = (event) => {
+        console.log('WebSocket onmessage event received');
+        try {
+          handleWebSocketMessage(event);
+        } catch (error) {
+          console.error('Error in handleWebSocketMessage:', error);
+        }
+      };
 
       ws.onerror = (event) => {
-        console.error('WebSocket error:', event);
+        console.error('WebSocket onerror event:', event);
         setError(new Error('WebSocket connection error'));
         setIsConnecting(false);
       };
 
       ws.onclose = (event) => {
-        console.log('WebSocket disconnected:', event.code, event.reason);
-        setIsConnected(false);
+        console.log('WebSocket onclose event:', event.code, event.reason);
+        if (isConnected) {
+          setIsConnected(false);
+          onConnectionChange?.(false);
+        }
         setIsConnecting(false);
         wsRef.current = null;
-        onConnectionChange?.(false);
 
         // Очищаем ping интервал
         if (pingIntervalRef.current) {

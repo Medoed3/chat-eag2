@@ -1,5 +1,5 @@
 // frontend/src/components/MessageList.tsx - ОБНОВЛЕННЫЙ для гарантированной доставки
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Message, DeliveryStatus } from '../types';
 import Avatar from './ui/Avatar';
 import { formatTime } from '../utils/formatTime';
@@ -28,7 +28,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   const [isScrolledToBottom, setIsScrolledToBottom] = useState(true);
   const [unreadMarker, setUnreadMarker] = useState<number | null>(null);
 
-  // Используем сервис синхронизации
+  // Используем сервис синхронизации без автоматического подтверждения прочтения
   const {
     sync,
     confirmDelivery,
@@ -41,32 +41,23 @@ export const MessageList: React.FC<MessageListProps> = ({
     autoSync: true,
     syncInterval: 30000,
     onNewMessages: (newMessages) => {
-      // Автоматически помечаем как прочитанные сообщения, которые мы видим
-      const unreadIds = newMessages
-        .filter(msg => msg.sender_id !== currentUserId && msg.delivery_status !== DeliveryStatus.READ)
-        .map(msg => msg.id);
-
-      if (unreadIds.length > 0) {
-        markAsRead(unreadIds, currentUserId);
-      }
+      console.log('New messages received:', newMessages);
     }
   });
 
-  // Используем WebSocket для уведомлений
-  const { isConnected, sendTypingIndicator } = useWebSocket({
-    chatId,
-    autoConnect: true,
-    onMessage: (message) => {
-      // Новое сообщение уже обрабатывается через useMessageSync
-    },
-    onNotification: (notification) => {
-      console.log('New message notification:', notification);
-    }
-  });
+  // Обработка смены чата через хук синхронизации
+  useEffect(() => {
+    // Удаляем вызов sync при смене чата, так как он уже вызывается в useMessageSync
+    // sync();
+  }, [chatId]);
+
+  // Временно отключен WebSocket для уведомлений до реализации функционала
+  const isConnected = true; // Имитируем подключение для UI
+  const sendTypingIndicator = () => {}; // Заглушка для функции
 
   // Прокрутка к последнему сообщению при добавлении новых
   useEffect(() => {
-    if (isScrolledToBottom && messagesEndRef.current) {
+    if (isScrolledToBottom && messagesEndRef.current && messages.length > 0) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, isScrolledToBottom]);
@@ -76,28 +67,38 @@ export const MessageList: React.FC<MessageListProps> = ({
     if (!messagesContainerRef.current) return;
 
     const container = messagesContainerRef.current;
-    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
-
-    setIsScrolledToBottom(isAtBottom);
+    const scrollPosition = container.scrollTop;
+    const scrollHeight = container.scrollHeight;
+    const clientHeight = container.clientHeight;
+    
+    const isAtBottom = scrollHeight - scrollPosition - clientHeight < 100;
+    
+    if (isAtBottom !== isScrolledToBottom) {
+      setIsScrolledToBottom(isAtBottom);
+    }
 
     // Загрузка предыдущих сообщений при прокрутке вверх
-    if (container.scrollTop < 100 && hasMore && !isLoading && onLoadMore) {
+    if (scrollPosition < 100 && hasMore && !isLoading && onLoadMore) {
       onLoadMore();
     }
 
-    // Определяем, какие сообщения видны для отметки как прочитанные
-    if (isAtBottom) {
-      const visibleMessages = getVisibleMessages();
-      markVisibleMessagesAsRead(visibleMessages);
-    }
-  }, [hasMore, isLoading, onLoadMore, currentUserId]);
+    // Временно отключена автоматическая отметка сообщений как прочитанных при прокрутке
+    // Причина: вызывает циклические обновления компонента
+    // if (isAtBottom) {
+    //   const visibleMessages = getVisibleMessages();
+    //   markVisibleMessagesAsRead(visibleMessages);
+    // }
+  }, [hasMore, isLoading, onLoadMore, currentUserId, isScrolledToBottom]);
 
   // Получение видимых сообщений
   const getVisibleMessages = useCallback(() => {
     if (!messagesContainerRef.current) return [];
 
     const container = messagesContainerRef.current;
-    const messageElements = container.querySelectorAll('[data-message-id]');
+    const messageElements = Array.from(container.querySelectorAll('[data-message-id]'));
+    
+    if (messageElements.length === 0) return [];
+    
     const visibleMessages: number[] = [];
 
     messageElements.forEach(element => {
@@ -119,8 +120,10 @@ export const MessageList: React.FC<MessageListProps> = ({
     return visibleMessages;
   }, []);
 
-  // Отметка видимых сообщений как прочитанных
+  // Временно отключена отметка сообщений как прочитанных из-за проблемы с циклическими обновлениями
   const markVisibleMessagesAsRead = useCallback((messageIds: number[]) => {
+    if (messageIds.length === 0) return;
+    
     const unreadMessages = messageIds.filter(id => {
       const message = messages.find(m => m.id === id);
       return message &&
@@ -128,10 +131,11 @@ export const MessageList: React.FC<MessageListProps> = ({
              message.delivery_status !== DeliveryStatus.READ;
     });
 
-    if (unreadMessages.length > 0) {
-      markAsRead(unreadMessages, currentUserId);
-    }
-  }, [messages, currentUserId, markAsRead]);
+    console.log('Visible messages to mark as read:', unreadMessages);
+    // Временно отключено: if (unreadMessages.length > 0) {
+    //   markAsRead(unreadMessages, currentUserId);
+    // }
+  }, [messages, currentUserId]);
 
   // Ручная синхронизация
   const handleManualSync = useCallback(() => {
@@ -148,7 +152,11 @@ export const MessageList: React.FC<MessageListProps> = ({
     );
 
     myMessages.forEach(async (msg) => {
-      await confirmDelivery(msg.id, currentUserId);
+      try {
+        await confirmDelivery(msg.id, currentUserId);
+      } catch (error) {
+        console.error('Failed to confirm delivery for message:', msg.id, error);
+      }
     });
   }, [messages, currentUserId, confirmDelivery]);
 
@@ -217,9 +225,11 @@ export const MessageList: React.FC<MessageListProps> = ({
   };
 
   // Группировка сообщений по датам
-  const groupMessagesByDate = () => {
+  const groupMessagesByDate = useCallback(() => {
     const groups: { [key: string]: Message[] } = {};
 
+    if (messages.length === 0) return groups;
+    
     messages.forEach(message => {
       const date = new Date(message.timestamp).toLocaleDateString('ru-RU', {
         day: 'numeric',
@@ -234,9 +244,9 @@ export const MessageList: React.FC<MessageListProps> = ({
     });
 
     return groups;
-  };
+  }, [messages]);
 
-  const messageGroups = groupMessagesByDate();
+  const messageGroups = useMemo(() => groupMessagesByDate(), [groupMessagesByDate]);
 
   return (
     <div className="flex flex-col h-full">

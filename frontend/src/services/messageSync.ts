@@ -3,6 +3,7 @@ import { Message, SyncResponse, MessageStatusUpdate, DeliveryStatus } from '../t
 import { api } from './api';
 
 class MessageSyncService {
+  private messagesByChat: Map<number, Message[]> = new Map();
   private pendingMessages: Map<string, Message> = new Map();
   private offlineQueue: Message[] = [];
   private eventListeners: Map<string, Function[]> = new Map();
@@ -15,9 +16,16 @@ class MessageSyncService {
     retryAttempts?: number;
     retryDelay?: number;
   }): Promise<SyncResponse> {
+    console.log('MessageSyncService.syncChat called', {
+      chatId: params.chatId,
+      lastSyncTimestamp: params.lastSyncTimestamp?.toISOString(),
+      lastSyncFromMap: this.lastSyncTimestamps.get(params.chatId)?.toISOString(),
+      limit: params.limit
+    });
+    
     try {
-      const lastSync = this.lastSyncTimestamps.get(params.chatId);
-      const lastSyncToUse = params.lastSyncTimestamp || lastSync;
+      // Всегда используем переданный lastSyncTimestamp, если он есть, иначе запрашиваем все сообщения
+      const lastSyncToUse = params.lastSyncTimestamp;
 
       const response = await api.get<SyncResponse>(`/api/chats/${params.chatId}/sync`, {
         params: {
@@ -48,7 +56,13 @@ class MessageSyncService {
         new Date(a.server_timestamp).getTime() - new Date(b.server_timestamp).getTime()
       );
 
+      // Сохраняем сообщения в кэш по чатам
+      this.messagesByChat.set(params.chatId, allMessages);
+
+      // Генерируем событие синхронизации
+      console.log('Emitting sync event', { chatId: params.chatId, messageCount: allMessages.length, unreadCount: response.data.unread_count });
       this.emit('sync', params.chatId, allMessages, response.data.unread_count);
+      
       return {
         ...response.data,
         messages: allMessages,
@@ -210,6 +224,16 @@ class MessageSyncService {
     this.pendingMessages.clear();
     localStorage.removeItem('message_queue');
     this.emit('queue-update', 0);
+  }
+
+  // Очистка сообщений для конкретного чата
+  clearChatMessages(chatId: number): void {
+    this.messagesByChat.delete(chatId);
+  }
+
+  // Получение сообщений из кэша для чата
+  getChatMessages(chatId: number): Message[] {
+    return this.messagesByChat.get(chatId) || [];
   }
 
   async restoreFromLocalStorage(): Promise<void> {

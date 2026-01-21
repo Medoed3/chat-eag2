@@ -68,34 +68,34 @@ export function useMessageSync(options: UseMessageSyncOptions = {}) {
   useEffect(() => {
     if (!chatId) return;
 
+    // Удаляем очистку сообщений при смене чата - это вызывало потерю сообщений
+    // if (chatId) {
+    //   setMessages([]);
+    //   setLastSync(null);
+    //   lastSyncTimestamp.current = 0;
+    // }
+
     const unsubscribe = messageSyncService.onSync((syncChatId, newMessages) => {
       if (syncChatId === chatId) {
-        setMessages(prev => {
-          // Объединяем сообщения, избегая дубликатов
-          const existingIds = new Set(prev.map(m => m.id));
-          const uniqueNewMessages = newMessages.filter(m => !existingIds.has(m.id));
+        // Устанавливаем новые сообщения
+        setMessages(newMessages);
 
-          const merged = [...prev, ...uniqueNewMessages].sort((a, b) =>
-            new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-          );
-
-          // Обновляем lastSync на основе последнего сообщения
-          if (merged.length > 0) {
-            const lastMessageTime = new Date(merged[merged.length - 1].timestamp);
-            if (!lastSync || lastMessageTime > lastSync) {
-              setLastSync(lastMessageTime);
-            }
+        // Обновляем lastSync на основе последнего сообщения
+        if (newMessages.length > 0) {
+          const lastMessageTime = new Date(newMessages[newMessages.length - 1].timestamp);
+          if (!lastSync || lastMessageTime > lastSync) {
+            setLastSync(lastMessageTime);
           }
+        }
 
-          return merged;
-        });
-
-        onNewMessages?.(newMessages);
+        // Временно отключаем обработчик новых сообщений из-за циклических обновлений
+        // onNewMessages?.(newMessages);
+        console.log('New messages received:', newMessages);
       }
     });
 
     return unsubscribe;
-  }, [chatId, lastSync, onNewMessages]);
+  }, [chatId]);
 
   // Подписка на обновления статусов
   useEffect(() => {
@@ -131,6 +131,8 @@ export function useMessageSync(options: UseMessageSyncOptions = {}) {
 
   // Синхронизация чата
   const sync = useCallback(async (since?: Date, force: boolean = false) => {
+    console.log('useMessageSync.sync called', { chatId, since: since?.toISOString(), force, lastSync: lastSync?.toISOString(), isSyncing });
+    
     if (!chatId) {
       console.log('No chatId provided for sync');
       return null;
@@ -143,7 +145,8 @@ export function useMessageSync(options: UseMessageSyncOptions = {}) {
       return null;
     }
 
-    // Проверка на частоту синхронизации (анти-флуд)
+    // Удаляем проверку на частоту синхронизации при принудительном вызове
+    // Это позволяет загружать сообщения при первом входе в чат
     const now = Date.now();
     const timeSinceLastSync = now - lastSyncTimestamp.current;
     const minSyncInterval = 5000;
@@ -155,7 +158,7 @@ export function useMessageSync(options: UseMessageSyncOptions = {}) {
 
     // Если уже синхронизируемся, не запускаем новую синхронизацию
     if (isSyncing && !force) {
-      console.log('Sync skipped: already syncing');
+      console.log('Sync skipped: already syncing', { chatId, isSyncing, force });
       return null;
     }
 
@@ -164,7 +167,7 @@ export function useMessageSync(options: UseMessageSyncOptions = {}) {
     lastSyncTimestamp.current = now;
 
     try {
-      console.log(`Starting sync for chat ${chatId}${since ? ` since ${since}` : ''}`);
+      console.log('Starting sync for chat ' + chatId + (since ? ' since ' + since.toISOString() : ' from last sync'));
 
       const response = await messageSyncService.syncChat({
         chatId,
@@ -174,7 +177,7 @@ export function useMessageSync(options: UseMessageSyncOptions = {}) {
         retryDelay: 1000
       });
 
-      console.log(`Sync completed for chat ${chatId}: ${response.messages.length} messages`);
+      console.log('Sync completed for chat ' + chatId + ': ' + response.messages.length + ' messages, unread: ' + (response.unread_count || 0));
 
       if (response.messages.length > 0) {
         const lastMessageTime = new Date(response.messages[response.messages.length - 1].timestamp);
@@ -184,7 +187,7 @@ export function useMessageSync(options: UseMessageSyncOptions = {}) {
       }
 
       if (response.unread_messages && response.unread_messages.length > 0) {
-        console.log(`Found ${response.unread_messages.length} unread messages`);
+        console.log('Found ' + response.unread_messages.length + ' unread messages:', response.unread_messages.map(m => m.id));
       }
 
       return response;
@@ -194,7 +197,7 @@ export function useMessageSync(options: UseMessageSyncOptions = {}) {
       if (err.response) {
         switch (err.response.status) {
           case 404:
-            setError(new Error(`Чат с ID ${chatId} не найден или нет доступа`));
+            setError(new Error('Чат с ID ' + chatId + ' не найден или нет доступа'));
             break;
           case 401:
             setError(new Error('Требуется авторизация'));
@@ -209,12 +212,12 @@ export function useMessageSync(options: UseMessageSyncOptions = {}) {
             syncTimeoutRef.current = setTimeout(() => sync(since, true), delay);
             break;
           default:
-            setError(new Error(`Ошибка сервера: ${err.response.status}`));
+            setError(new Error('Ошибка сервера: ' + err.response.status));
         }
       } else if (err.request) {
         setError(new Error('Нет ответа от сервера. Проверьте подключение к интернету.'));
       } else {
-        setError(new Error(`Ошибка при выполнении запроса: ${err.message}`));
+        setError(new Error('Ошибка при выполнении запроса: ' + err.message));
       }
 
       return null;
