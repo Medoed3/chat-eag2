@@ -196,6 +196,35 @@ class RedisClient:
             raise RuntimeError("Redis is not connected")
         return self._redis
 
+    def get_online_users_in_chat(self, chat_id: int) -> List[int]:
+        """
+        Возвращает список ID пользователей, которые онлайн в указанном чате
+        """
+        try:
+            self._ensure_connected()
+            # Получаем всех пользователей, которые онлайн в чате
+            online_users = self._redis.smembers(f"chat:{chat_id}:online")
+            return [int(user_id) for user_id in online_users]
+        except RuntimeError as e:
+            logger.error(f"Redis not connected: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Error getting online users in chat {chat_id}: {e}")
+            return []
+
+    def publish_message(self, chat_id: int, message: dict):
+        """
+        Публикует сообщение в канал чата
+        """
+        try:
+            self._ensure_connected()
+            channel = f"chat:{chat_id}:messages"
+            self._redis.publish(channel, json.dumps(message))
+        except RuntimeError as e:
+            logger.error(f"Redis not connected: {e}")
+        except Exception as e:
+            logger.error(f"Error publishing message to chat {chat_id}: {e}")
+
 
 # Глобальный экземпляр Redis клиента
 redis_client = RedisClient()

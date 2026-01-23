@@ -21,20 +21,29 @@ const ContactsPage: React.FC = () => {
   const loadContacts = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await api.get<User[]>('/api/users/contacts');
-      setContacts(response.data);
-      setFilteredContacts(response.data);
+      // Прямой запрос к API для получения контактов
+      const response = await api.get('/api/users/contacts');
+      const contacts = response.data;
+      
+      setContacts(contacts);
+      setFilteredContacts(contacts);
     } catch (error) {
       console.error('Ошибка загрузки контактов:', error);
-      // Если endpoint недоступен, пробуем получить через admin (для админов)
+      
+      // Fallback: если основной endpoint недоступен
       try {
-        const adminResponse = await api.get<User[]>('/api/users');
+        const response = await api.get('/api/users');
         const currentUser = JSON.parse(localStorage.getItem('user_data') || '{}');
-        const filtered = adminResponse.data.filter(user => user.id !== currentUser.id && user.is_active);
+        
+        const filtered = response.data
+          .filter((user: any) => user.id !== currentUser.id && user.is_active);
+        
         setContacts(filtered);
         setFilteredContacts(filtered);
-      } catch (adminError) {
-        console.error('Ошибка загрузки через admin endpoint:', adminError);
+      } catch (fallbackError) {
+        console.error('Ошибка загрузки контактов (fallback):', fallbackError);
+        setContacts([]);
+        setFilteredContacts([]);
       }
     } finally {
       setLoading(false);
@@ -49,18 +58,23 @@ const ContactsPage: React.FC = () => {
   useEffect(() => {
     let result = contacts;
 
-    // Поиск по имени или логину
+    // Поиск по имени, логину, должности или отделу
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
       result = result.filter(contact =>
         contact.full_name.toLowerCase().includes(term) ||
-        contact.login.toLowerCase().includes(term)
+        contact.login.toLowerCase().includes(term) ||
+        (contact.position && contact.position.toLowerCase().includes(term)) ||
+        (contact.department && contact.department.toLowerCase().includes(term))
       );
     }
 
-    // Фильтр по отделу (если есть поле department)
+    // Фильтр по отделу
     if (departmentFilter !== 'all') {
-      // Здесь можно добавить логику фильтрации по отделу, если такое поле есть в User
+      result = result.filter(contact => 
+        contact.department && 
+        contact.department.toLowerCase() === departmentFilter
+      );
     }
 
     setFilteredContacts(result);
@@ -93,7 +107,7 @@ const ContactsPage: React.FC = () => {
 
   // Статистика контактов
   const totalContacts = contacts.length;
-  const onlineContacts = contacts.length; // Здесь можно добавить логику онлайн статуса
+  const onlineContacts = contacts.filter(contact => contact.is_online).length;
 
   if (loading) {
     return <LoadingScreen message="Загрузка контактов..." />;
@@ -139,6 +153,8 @@ const ContactsPage: React.FC = () => {
               <option value="hr">HR</option>
               <option value="sales">Продажи</option>
               <option value="support">Поддержка</option>
+              <option value="finance">Финансы</option>
+              <option value="marketing">Маркетинг</option>
             </select>
           </div>
           <div className="text-gray-600">
@@ -217,17 +233,27 @@ const ContactsPage: React.FC = () => {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        window.location.href = `mailto:${contact.login}@company.com`;
+                        window.location.href = `mailto:${contact.email || contact.login + '@company.com'}`;
                       }}
                       className="flex items-center hover:text-blue-600"
                     >
                       <Mail size={12} className="mr-1" />
-                      Написать
+                      {contact.email || `${contact.login}@company.com`}
                     </button>
 
                     <div className="flex items-center">
                       <Building size={12} className="mr-1" />
-                      <span>Отдел</span>
+                      <span>{contact.department || 'Без отдела'}</span>
+                    </div>
+                    
+                    <div className="flex items-center">
+                      <Phone size={12} className="mr-1" />
+                      <span>{contact.phone || 'Не указан'}</span>
+                    </div>
+                    
+                    <div className="flex items-center">
+                      <UserPlus size={12} className="mr-1" />
+                      <span>{contact.position || 'Сотрудник'}</span>
                     </div>
                   </div>
                 </div>

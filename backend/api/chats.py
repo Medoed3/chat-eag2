@@ -36,22 +36,27 @@ def get_chats(
         # Админ видит все чаты
         chats = db.query(Chat).all()
     else:
-        # Обычный пользователь — только свои
-        chats = db.query(Chat).filter(
+        # Обычный пользователь — только свои групповые чаты
+        group_chats = db.query(Chat).filter(
             Chat.is_group == True,
             Chat.members.any(User.id == current_user.id)
         ).all()
 
         # Личные чаты: где он owner или участник
         private_chats = db.query(Chat).filter(
-            Chat.is_group == False,
+            Chat.is_group == False
+        ).join(
+            chat_members,
+            chat_members.c.chat_id == Chat.id,
+            isouter=True
+        ).filter(
             or_(
                 Chat.owner_id == current_user.id,
                 chat_members.c.user_id == current_user.id
             )
-        ).all()
+        ).distinct().all()
 
-        chats += private_chats
+        chats = group_chats + private_chats
 
     # Убедимся, что нет дублей
     chat_dict = {chat.id: chat for chat in chats}

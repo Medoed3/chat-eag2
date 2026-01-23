@@ -26,7 +26,42 @@ from middleware.metrics_middleware import MetricsMiddleware
 from services.metrics import metrics_service
 
 # Настройка логирования
-logging.basicConfig(level=logging.INFO)
+import logging
+import logging.handlers
+
+# Настройка логирования
+log_level = logging.INFO
+
+# Создаем форматтер
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# Настройка обработчика для основного лога
+file_handler = logging.handlers.RotatingFileHandler(
+    '/Users/medoed/Dev/chat-eag2/backend/logs/app.log',
+    maxBytes=10*1024*1024,  # 10MB
+    backupCount=5
+)
+file_handler.setFormatter(formatter)
+file_handler.setLevel(log_level)
+
+# Настройка обработчика для ошибок
+error_handler = logging.handlers.RotatingFileHandler(
+    '/Users/medoed/Dev/chat-eag2/backend/logs/error.log',
+    maxBytes=10*1024*1024,
+    backupCount=5
+)
+error_handler.setFormatter(formatter)
+error_handler.setLevel(logging.ERROR)
+
+# Настраиваем корневой логгер
+root_logger = logging.getLogger()
+root_logger.setLevel(log_level)
+root_logger.addHandler(file_handler)
+root_logger.addHandler(error_handler)
+
+# Предотвращаем дублирование логов
+root_logger.propagate = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -109,7 +144,7 @@ app.add_middleware(
 app.add_middleware(MetricsMiddleware)
 
 # Импорт роутеров
-from api import users, chats, media, admin
+from api import users, chats, media
 
 
 # ОБНОВЛЕННЫЙ менеджер WebSocket соединений с Redis
@@ -297,6 +332,7 @@ class ConnectionManager:
         except Exception as e:
             logger.error(f"Error getting online users: {e}")
             return []
+
 
 
 # Создаем менеджер с подключенным Redis клиентом
@@ -633,9 +669,10 @@ try:
     app.include_router(chats.router, prefix="/api", tags=["chats"])
     app.include_router(messages_router, prefix="/api", tags=["messages"])
     app.include_router(media.router, prefix="/api", tags=["media"])
-    app.include_router(admin.router, prefix="/api", tags=["admin"])
     app.include_router(metrics_router, prefix="/api", tags=["metrics"])
     app.include_router(push_router, prefix="/api", tags=["push"])
+    # admin router подключается позже после users, чтобы избежать конфликтов маршрутов
+    
 
 except ImportError as e:
     logger.warning(f"Some routers not imported: {e}")
@@ -711,3 +748,8 @@ async def get_online_users(
         online_users.remove(current_user.id)
 
     return {"online_users": online_users, "count": len(online_users)}
+
+
+
+# Маршрут /api/users/contacts обрабатывается через users.router в api/users.py
+# Дублирующие маршруты удалены для предотвращения конфликтов и ошибок доступа
