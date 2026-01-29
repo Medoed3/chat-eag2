@@ -1,5 +1,5 @@
 # backend/services/message_delivery.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 import uuid
 import logging
@@ -49,8 +49,8 @@ class MessageDeliveryService:
                 file_url=file_url,
                 file_type=file_type,
                 delivery_status=DeliveryStatus.PENDING.value,
-                server_timestamp=datetime.utcnow(),
-                timestamp=datetime.utcnow()
+                server_timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(timezone.utc)
             )
 
             self.db.add(message)
@@ -86,8 +86,8 @@ class MessageDeliveryService:
                         user_id=participant.id,
                         chat_id=chat_id,
                         status=DeliveryStatus.PENDING.value,
-                        created_at=datetime.utcnow(),
-                        updated_at=datetime.utcnow()
+                        created_at=datetime.now(timezone.utc),
+                        updated_at=datetime.now(timezone.utc)
                     )
                     self.db.add(delivery)
                     delivery_entries.append(delivery)
@@ -114,6 +114,7 @@ class MessageDeliveryService:
             # Обновляем статус сообщения
             if online_users_notified:
                 message.delivery_status = DeliveryStatus.DELIVERED.value
+                message.delivered_at = datetime.now(timezone.utc)
             else:
                 message.delivery_status = DeliveryStatus.PENDING.value
 
@@ -168,12 +169,12 @@ class MessageDeliveryService:
                         delivery = self.db.query(MessageDelivery).filter(
                             MessageDelivery.message_id == message.id,
                             MessageDelivery.user_id == user.id
-                        ).first()
+                        ).with_for_update().first()
 
                         if delivery:
                             delivery.status = DeliveryStatus.DELIVERED.value
-                            delivery.delivered_at = datetime.utcnow()
-                            delivery.updated_at = datetime.utcnow()
+                            delivery.delivered_at = datetime.now(timezone.utc)
+                            delivery.updated_at = datetime.now(timezone.utc)
                             notified_users.add(user.id)
                             logger.debug(f"Message {message.id} delivered to online user {user.id}")
 
@@ -201,7 +202,7 @@ class MessageDeliveryService:
                             message_id=message.id,
                             user_id=user.id,
                             chat_id=chat.id,
-                            stored_at=datetime.utcnow()
+                            stored_at=datetime.now(timezone.utc)
                         )
                         self.db.add(unread)
 
@@ -234,25 +235,32 @@ class MessageDeliveryService:
             user_id: int,
             delivered_at: Optional[datetime] = None
     ) -> bool:
+        """
+        Подтверждение доставки сообщения пользователем
+        Используется для подтверждения доставки отдельными пользователями
+        """
+        db = self.db  # Для удобства
         try:
-            if not delivered_at:
-                delivered_at = datetime.utcnow()
-
-            delivery = self.db.query(MessageDelivery).filter(
+            if delivered_at is None:
+                delivered_at = datetime.now(timezone.utc)
+            
+            # Получаем запись доставки
+            delivery = db.query(MessageDelivery).filter(
                 MessageDelivery.message_id == message_id,
                 MessageDelivery.user_id == user_id
-            ).first()
-
+            ).with_for_update(of=MessageDelivery).first()
+            
             if not delivery:
                 logger.warning(f"No delivery record for message {message_id}, user {user_id}")
                 return False
-
+            
+            # Обновляем статус доставки
             delivery.status = DeliveryStatus.DELIVERED.value
             delivery.delivered_at = delivered_at
-            delivery.updated_at = datetime.utcnow()
-
+            delivery.updated_at = datetime.now(timezone.utc)
+            
             # Убираем из непрочитанных
-            unread = self.db.query(UnreadMessage).filter(
+            unread = db.query(UnreadMessage).filter(
                 UnreadMessage.message_id == message_id,
                 UnreadMessage.user_id == user_id
             ).first()
@@ -260,17 +268,27 @@ class MessageDeliveryService:
             if unread:
                 unread.delivered_at = delivered_at
 
-            self.db.commit()
-
             # Обновляем общий статус сообщения
             self._update_message_status(message_id)
 
-            logger.info(f"Message {message_id} delivered to user {user_id}")
-            return True
+            db.commit()  # Фиксируем изменения
+            
+            # Повторно получаем запись доставки для проверки
+            delivery_after_commit = db.query(MessageDelivery).filter(
+                MessageDelivery.message_id == message_id,
+                MessageDelivery.user_id == user_id
+            ).first()
+            
+            if delivery_after_commit and delivery_after_commit.status == DeliveryStatus.DELIVERED.value:
+                logger.info(f"Message {message_id} delivered to user {user_id}")
+                return True
+            else:
+                logger.error(f"Failed to confirm delivery: {message_id}, user {user_id}")
+                return False
 
         except Exception as e:
             logger.error(f"Error confirming delivery: {e}")
-            self.db.rollback()
+            db.rollback()
             return False
 
     async def confirm_read(
@@ -279,9 +297,13 @@ class MessageDeliveryService:
             user_id: int,
             read_at: Optional[datetime] = None
     ) -> bool:
+        """
+        Подтверждение прочтения сообщения пользователем
+        Используется для подтверждения прочтения отдельными пользователями
+        """
         try:
             if not read_at:
-                read_at = datetime.utcnow()
+                read_at = datetime.now(timezone.utc)
 
             delivery = self.db.query(MessageDelivery).filter(
                 MessageDelivery.message_id == message_id,
@@ -294,7 +316,7 @@ class MessageDeliveryService:
 
             delivery.status = DeliveryStatus.READ.value
             delivery.read_at = read_at
-            delivery.updated_at = datetime.utcnow()
+            delivery.updated_at = datetime.now(timezone.utc)
 
             # Удаляем из непрочитанных
             unread = self.db.query(UnreadMessage).filter(
@@ -334,12 +356,19 @@ class MessageDeliveryService:
             all_delivered = all(d.status == DeliveryStatus.DELIVERED.value for d in deliveries)
             all_read = all(d.status == DeliveryStatus.READ.value for d in deliveries)
 
-            if all_read:
+            # Находим последнее время доставки и прочтения
+            latest_delivery = max((d.delivered_at for d in deliveries if d.status == DeliveryStatus.DELIVERED.value and d.delivered_at), default=None)
+            latest_read = max((d.read_at for d in deliveries if d.status == DeliveryStatus.READ.value and d.read_at), default=None)
+
+            # Обновляем статус доставки сообщения
+            if all_read and latest_read:
                 message.delivery_status = DeliveryStatus.READ.value
-                message.read_at = datetime.utcnow()
-            elif all_delivered:
+                if message.read_at is None or message.read_at < latest_read:
+                    message.read_at = latest_read
+            elif all_delivered and latest_delivery:
                 message.delivery_status = DeliveryStatus.DELIVERED.value
-                message.delivered_at = datetime.utcnow()
+                if message.delivered_at is None or message.delivered_at < latest_delivery:
+                    message.delivered_at = latest_delivery
 
             self.db.commit()
 
@@ -392,8 +421,8 @@ class MessageDeliveryService:
                         await redis_client.publish_message(delivery.chat_id, notification)
 
                         delivery.retry_count += 1
-                        delivery.last_retry_at = datetime.utcnow()
-                        delivery.updated_at = datetime.utcnow()
+                        delivery.last_retry_at = datetime.now(timezone.utc)
+                        delivery.updated_at = datetime.now(timezone.utc)
 
                         logger.info(f"Retry {delivery.retry_count} for message {delivery.message_id}")
 

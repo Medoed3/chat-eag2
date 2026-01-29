@@ -1,13 +1,5 @@
 # backend/create_test_users.py
-import os
-import sys
-
-# Устанавливаем абсолютный путь
-current_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, current_dir)
-
-# УСТАНАВЛИВАЕМ РАБОЧУЮ ДИРЕКТОРИЮ НА BACKEND
-os.chdir(current_dir)
+# Удаляем ручные настройки sys.path и chdir, так как backend является пакетом
 
 from database import SessionLocal, engine, Base
 from models import User, Chat, Message

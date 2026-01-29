@@ -9,36 +9,52 @@ logger = logging.getLogger(__name__)
 
 
 class RedisClient:
-    def __init__(self, host: str = "localhost", port: int = 6379, db: int = 0):
+    def __init__(self, host: str = "localhost", port: int = 6379, db: int = 0, max_connections: int = 10):
         self.host = host
         self.port = port
         self.db = db
         self._redis: Optional[redis.Redis] = None
         self._pubsub: Optional[redis.client.PubSub] = None
         self._connected = False  # Добавляем флаг подключения
+        self._initialized = False  # Флаг инициализации
 
     def connect(self):
         """Синхронное подключение к Redis"""
+        if self._initialized:
+            return  # Уже инициализирован
+            
         try:
-            self._redis = redis.Redis(
+            # Создаем connection pool для улучшения производительности
+            self.connection_pool = redis.ConnectionPool(
                 host=self.host,
                 port=self.port,
                 db=self.db,
+                max_connections=max_connections,
                 decode_responses=True,
                 socket_connect_timeout=5,
                 socket_timeout=5,
                 retry_on_timeout=True
             )
+            
+            self._redis = redis.Redis(
+                connection_pool=self.connection_pool,
+                retry_on_timeout=True
+            )
             self._redis.ping()
             self._connected = True  # Устанавливаем флаг
+            self._initialized = True  # Устанавливаем флаг инициализации
             logger.info(f"Connected to Redis at {self.host}:{self.port}")
         except Exception as e:
             logger.error(f"Failed to connect to Redis: {e}")
             self._connected = False
+            self._initialized = False
             raise
 
     async def connect_async(self):
         """Асинхронное подключение к Redis"""
+        if self._initialized:
+            return  # Уже инициализирован
+            
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, self.connect)
 
@@ -48,7 +64,13 @@ class RedisClient:
             self._pubsub.close()
         if self._redis:
             self._redis.close()
+            self._redis = None  # Очищаем ссылку
+        if hasattr(self, 'connection_pool') and self.connection_pool:
+            self.connection_pool.disconnect()
+            self.connection_pool = None
+        
         self._connected = False  # Сбрасываем флаг
+        self._initialized = False  # Сбрасываем флаг инициализации
         logger.info("Disconnected from Redis")
 
     def _ensure_connected(self):
@@ -212,14 +234,15 @@ class RedisClient:
             logger.error(f"Error getting online users in chat {chat_id}: {e}")
             return []
 
-    def publish_message(self, chat_id: int, message: dict):
+    async def publish_message(self, chat_id: int, message: dict):
         """
         Публикует сообщение в канал чата
         """
         try:
             self._ensure_connected()
-            channel = f"chat:{chat_id}:messages"
-            self._redis.publish(channel, json.dumps(message))
+            channel = f"chat:{chat_id}:notifications"
+            # Используем асинхронную публикацию
+            await self._redis.publish(channel, json.dumps(message))
         except RuntimeError as e:
             logger.error(f"Redis not connected: {e}")
         except Exception as e:

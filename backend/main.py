@@ -1,4 +1,3 @@
-# backend/main.py - исправленная версия
 from fastapi import FastAPI, Depends, WebSocket, WebSocketDisconnect, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, sessionmaker
@@ -14,10 +13,20 @@ import time
 from starlette.staticfiles import StaticFiles
 from datetime import datetime
 
-import schemas
+import sys
+import os
+
+# Добавляем путь к backend в sys.path если его нет
+current_dir = os.path.dirname(os.path.abspath(__file__))
+backend_dir = os.path.join(current_dir, '..')
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
+
+# Теперь можно импортировать из database, models и schemas
 import models
-from database import get_db, Base
-from auth import get_current_user, router as auth_router
+import schemas
+from database import get_db
+import auth
 from utils.security import verify_token
 from utils.redis_client import RedisClient, init_redis  # Убираем redis_client из импорта
 from services.message_delivery import MessageDeliveryService
@@ -78,12 +87,13 @@ class Config:
     CORS_ALLOW_CREDENTIALS = True
 
 
-# Пытаемся импортировать конфигурацию production
+# Пытаемся импортировать конфигурацию development
 try:
     import config.development as config
 
     logger.info("Используется конфигурация development")
 except ImportError:
+    logger.warning("Конфигурация development.py не найдена, пробуем production")
     try:
         import config.production as config
 
@@ -144,7 +154,7 @@ app.add_middleware(
 app.add_middleware(MetricsMiddleware)
 
 # Импорт роутеров
-from api import users, chats, media
+from backend.api import users, chats, media
 
 
 # ОБНОВЛЕННЫЙ менеджер WebSocket соединений с Redis
@@ -500,7 +510,6 @@ async def websocket_chat_endpoint(websocket: WebSocket, chat_id: int):
             pass
 
 
-@app.on_event("startup")
 async def startup_event():
     """Инициализация при запуске"""
     logger.info("Starting Corporate Messenger with Guaranteed Delivery...")
@@ -522,6 +531,31 @@ async def startup_event():
     asyncio.create_task(_process_notification_queue())
     asyncio.create_task(_update_metrics_periodically())
     asyncio.create_task(_cleanup_old_data())
+    
+    # Запускаем PostgreSQL LISTEN/NOTIFY прослушиватель
+    from listeners.postgres_listener import create_postgres_listener
+    
+    # Создаем и запускаем PostgreSQL LISTEN/NOTIFY прослушиватель
+    postgres_listener = create_postgres_listener()
+    asyncio.create_task(postgres_listener.start())
+    
+    logger.info("PostgreSQL LISTEN/NOTIFY listener started")
+
+
+async def shutdown_event():
+    """Очистка при завершении"""
+    logger.info("Shutting down Corporate Messenger...")
+    redis_client.disconnect()
+    
+    # Останавливаем PostgreSQL прослушиватель
+    from listeners.postgres_listener import create_postgres_listener
+    
+    # Создаем экземпляр прослушивателя
+    postgres_listener = create_postgres_listener()
+    await postgres_listener.stop()
+    
+    logger.info("Shutdown complete")
+
 
 
 async def _update_metrics_periodically():
@@ -647,13 +681,6 @@ async def _process_notification_task(task: dict):
         logger.error(f"Error processing notification task: {e}")
 
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Очистка при завершении"""
-    logger.info("Shutting down Corporate Messenger...")
-    redis_client.disconnect()
-
-
 # Импортируем и создаем роутер для сообщений
 try:
     from api.messages import create_router
@@ -664,7 +691,7 @@ try:
     messages_router = create_router(manager)
 
     # Подключаем роуты
-    app.include_router(auth_router, prefix="", tags=["auth"])
+    app.include_router(auth.router, prefix="", tags=["auth"])
     app.include_router(users.router, prefix="/api", tags=["users"])
     app.include_router(chats.router, prefix="/api", tags=["chats"])
     app.include_router(messages_router, prefix="/api", tags=["messages"])
@@ -673,6 +700,7 @@ try:
     app.include_router(push_router, prefix="/api", tags=["push"])
     # admin router подключается позже после users, чтобы избежать конфликтов маршрутов
     
+
 
 except ImportError as e:
     logger.warning(f"Some routers not imported: {e}")
@@ -729,14 +757,14 @@ async def health_check():
 
 
 @app.get("/api/me", response_model=schemas.UserResponse)
-def read_current_user(current_user: models.User = Depends(get_current_user)):
+def read_current_user(current_user: models.User = Depends(auth.get_current_user)):
     return current_user
 
 
 @app.get("/api/online-users")
 async def get_online_users(
         chat_id: Optional[int] = None,
-        current_user: models.User = Depends(get_current_user)
+        current_user: models.User = Depends(auth.get_current_user)
 ):
     """Получение списка онлайн пользователей"""
     if chat_id:
@@ -748,8 +776,3 @@ async def get_online_users(
         online_users.remove(current_user.id)
 
     return {"online_users": online_users, "count": len(online_users)}
-
-
-
-# Маршрут /api/users/contacts обрабатывается через users.router в api/users.py
-# Дублирующие маршруты удалены для предотвращения конфликтов и ошибок доступа

@@ -1,10 +1,13 @@
 # backend/models.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, Table, JSON, Enum
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, Table, JSON, Enum, text, Index
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship
-from database import Base
+# Импортируем Base из текущего пакета
+from sqlalchemy.ext.declarative import declarative_base
+
+Base = declarative_base()
 from datetime import datetime
 import enum
-import uuid
 
 # Ассоциативная таблица для связи "многие ко многим" — пользователи и групповые чаты
 chat_members = Table(
@@ -73,18 +76,24 @@ class Message(Base):
     __tablename__ = "messages"
 
     id = Column(Integer, primary_key=True, index=True)
-    client_message_id = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    client_message_id = Column(String, unique=True, index=True, nullable=False)
     content = Column(Text, nullable=True)
     file_url = Column(String(200), nullable=True)
     file_type = Column(String(20), nullable=True)
     sender_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     chat_id = Column(Integer, ForeignKey("chats.id", ondelete="CASCADE"), nullable=False)
-    server_timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    server_timestamp = Column(DateTime(timezone=True), server_default=text("now()"), nullable=False)
+    timestamp = Column(DateTime(timezone=True), server_default=text("now()"))
     delivery_status = Column(Enum(DeliveryStatus), default=DeliveryStatus.PENDING, nullable=False)
     is_read = Column(Boolean, default=False)
     delivered_at = Column(DateTime, nullable=True)
     read_at = Column(DateTime, nullable=True)
+    
+    # Добавляем индекс для оптимизации уведомлений
+    __table_args__ = (
+        Index('ix_messages_chat_timestamp', 'chat_id', 'server_timestamp'),
+        Index('ix_messages_sender_chat', 'sender_id', 'chat_id')
+    )
 
     # Связи
     sender = relationship("User", back_populates="messages")

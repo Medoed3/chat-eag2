@@ -24,8 +24,40 @@ const ChatPage: React.FC = () => {
     is_member: boolean;
     is_active: boolean;
   } | null>(null);
+  const [currentChat, setCurrentChat] = useState<Chat | null>(null);
 
   const numericChatId = chatId ? parseInt(chatId, 10) : 0;
+
+  // Получаем текущего пользователя
+  
+  // Получаем информацию о текущем чате
+  useEffect(() => {
+    if (numericChatId && currentUser) {
+      const fetchChat = async () => {
+        try {
+          const response = await api.get<Chat>(`/api/chats/${numericChatId}`);
+          setCurrentChat(response.data);
+        } catch (error) {
+          console.error('Error fetching chat:', error);
+          setCurrentChat(null);
+        }
+      };
+      fetchChat();
+    }
+  }, [numericChatId, currentUser]);
+
+  const getChatTitle = (): string => {
+    if (!currentChat) return `Чат ${chatId}`;
+    
+    if (currentChat.is_group) {
+      // Для группового чата возвращаем название группы
+      return currentChat.name || `Групповой чат ${chatId}`;
+    } else {
+      // Для личного чата возвращаем имя собеседника
+      const otherMember = currentChat.members.find(m => m.id !== currentUser?.id);
+      return otherMember?.full_name || `Личный чат ${chatId}`;
+    }
+  };
 
   // Получаем текущего пользователя
   useEffect(() => {
@@ -222,7 +254,7 @@ const ChatPage: React.FC = () => {
     <div className="h-screen bg-gray-50 flex flex-col">
       {/* MobileHeader вместо старого хедера */}
       <MobileHeader
-        title={`Чат ${chatId}`}
+        title={getChatTitle()}
         showBackButton={true}
       />
 

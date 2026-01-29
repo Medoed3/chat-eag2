@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from jose import jwt, JWTError
 
 import schemas
-import database
+from database import get_db
 import models
 from utils.security import verify_password, create_access_token, SECRET_KEY, ALGORITHM
 
@@ -17,7 +17,7 @@ router = APIRouter()
 
 def get_current_user(
         token: str = Depends(oauth2_scheme),
-        db: Session = Depends(database.get_db)  # Используем функцию из database.py
+        db: Session = Depends(get_db)  # Используем импортированную функцию get_db
 ):
     """
     Получение текущего пользователя из JWT токена
@@ -47,7 +47,7 @@ def get_current_user(
 @router.post("/login", response_model=schemas.TokenResponse)
 def login(
         request: schemas.LoginRequest,
-        db: Session = Depends(database.get_db)  # Используем функцию из database.py
+        db: Session = Depends(get_db)  # Используем импортированную функцию get_db
 ):
     """
     Аутентификация пользователя

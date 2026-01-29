@@ -225,37 +225,50 @@ def create_router(manager):
             raise HTTPException(status_code=403, detail="Нет доступа к чату")
 
         if not message_data.content and not message_data.file_url:
+            logger.warning(f"Попытка отправить сообщение без содержания от пользователя {current_user.id} в чат {message_data.chat_id}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Сообщение должно содержать текст или файл"
             )
 
+        # Генерируем client_message_id если его нет
+        if not message_data.client_message_id:
+            message_data.client_message_id = str(uuid.uuid4())
+
         delivery_service = MessageDeliveryService(db)
 
-        message, result = await delivery_service.send_message(
-            sender_id=current_user.id,
-            chat_id=message_data.chat_id,
-            content=message_data.content,
-            file_url=message_data.file_url,
-            file_type=message_data.file_type,
-            client_message_id=message_data.client_message_id
-        )
+        try:
+            message, result = await delivery_service.send_message(
+                sender_id=current_user.id,
+                chat_id=message_data.chat_id,
+                content=message_data.content,
+                file_url=message_data.file_url,
+                file_type=message_data.file_type,
+                client_message_id=message_data.client_message_id
+            )
+            
+            if not message:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Не удалось отправить сообщение: {result}"
+                )
 
-        if not message:
+            if result == "duplicate":
+                return message
+                
+        except Exception as e:
+            logger.error(f"Error in message delivery service: {e}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Не удалось отправить сообщение: {result}"
+                detail="Internal server error in message delivery service"
             )
-
-        if result == "duplicate":
-            return message
 
         # Загружаем отправителя
         db.refresh(message)
         message.sender = current_user
 
         # Отправляем уведомление через WebSocket
-        await manager.broadcast_notification(chat.id, {
+        notification = {
             "type": "new_message",
             "message_id": message.id,
             "chat_id": chat.id,
@@ -263,7 +276,11 @@ def create_router(manager):
             "client_message_id": message.client_message_id,
             "timestamp": message.server_timestamp.isoformat(),
             "content": message.content
-        })
+        }
+        
+        await manager.broadcast_notification(chat.id, notification)
+        
+        logger.info(f"Sent notification for new message {message.id} in chat {chat.id}")
 
         # Фоновая задача для push-уведомлений
         background_tasks.add_task(

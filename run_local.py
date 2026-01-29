@@ -155,7 +155,8 @@ def start_backend():
         with open(env_file, 'w') as f:
             f.write("REDIS_HOST=localhost\n")
             f.write("REDIS_PORT=6379\n")
-            f.write(f"DATABASE_URL=sqlite:///{db_path}\n")
+            # Будет использовать DATABASE_URL из config.production.py, но можно переопределить здесь
+            # f.write(f"DATABASE_URL=sqlite:///{db_path}\n")  # Закомментировано, чтобы использовать config
 
     # Запускаем сервер ИЗ ТЕКУЩЕЙ ДИРЕКТОРИИ (backend/)
     backend_proc = subprocess.Popen([

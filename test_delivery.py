@@ -13,17 +13,15 @@ from datetime import datetime
 
 from sqlalchemy import text
 
-sys.path.append(os.path.join(os.path.dirname(__file__), 'backend'))
-
-from database import SessionLocal
-from models import User, Chat, Message
-from services.message_delivery import MessageDeliveryService
+from backend.database import SessionLocal
+from backend.models import User, Chat, Message, MessageDelivery
+from backend.services.message_delivery import MessageDeliveryService
 
 
 def test_redis_connection():
     """Тест подключения к Redis"""
     try:
-        from utils.redis_client import redis_client
+        from backend.utils.redis_client import redis_client
         redis_client.connect()
         print("✓ Redis подключен успешно")
         return True
@@ -76,7 +74,7 @@ async def test_message_delivery():
             name="Тестовый чат",
             is_group=True,
             owner_id=user1.id,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(),
             is_active=True
         )
         db.add(chat)

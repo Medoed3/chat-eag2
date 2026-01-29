@@ -278,7 +278,7 @@ export function useMessageSync(options: UseMessageSyncOptions = {}) {
       chat_id: chatId,
       timestamp: new Date(),
       server_timestamp: new Date(),
-      delivery_status: DeliveryStatus.SENDING, // Изменено с SENDING на PENDING
+      delivery_status: DeliveryStatus.PENDING, // Изменено с SENDING на PENDING
       is_read: false,
       delivered_at: null,
       read_at: null,

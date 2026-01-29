@@ -6,7 +6,7 @@ from sqlalchemy import or_, and_
 from pydantic import BaseModel
 
 from models import Chat, User, chat_members, Message
-from schemas import ChatCreate, ChatResponse, BulkUserOperation
+from schemas import ChatCreate, ChatResponse, BulkUserOperation, AddMemberRequest
 from auth import get_current_user
 from database import get_db
 

@@ -2,8 +2,13 @@
 import sys
 import os
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Добавляем путь к backend в sys.path если его нет
+current_dir = os.path.dirname(os.path.abspath(__file__))
+backend_dir = os.path.join(current_dir, '..')
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
 
+# Теперь можно импортировать из database
 from database import engine, Base
 from models import DeliveryStatus
 from sqlalchemy import inspect, text

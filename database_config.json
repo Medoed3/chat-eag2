@@ -1,0 +1,11 @@
+{
+  "database": "eag-messenger",
+  "host": "localhost",
+  "port": 5432,
+  "username": "chat_user",
+  "password": "As745296",
+  "dialect": "postgresql",
+  "pool_size": 20,
+  "max_overflow": 0,
+  "pool_recycle": 3600
+}

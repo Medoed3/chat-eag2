@@ -81,9 +81,7 @@ run_migrations() {
 
     # Простая миграция для SQLite
     python -c "
-import sys
-sys.path.append('.')
-from database import migrate_database
+from backend.database import migrate_database
 migrate_database()
 print('Миграции применены')
     "
